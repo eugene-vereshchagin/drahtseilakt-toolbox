@@ -422,12 +422,32 @@ fn level(
     }
     let tmp = dir.join(".remaster-tmp");
     let mut done = 0;
-    for img in doc
+    // the images the materials use as normal maps (made from the grown textures, never grown themselves)
+    let normal_images: std::collections::HashSet<u64> = doc
+        .get("materials")
+        .and_then(|m| m.as_array())
+        .into_iter()
+        .flatten()
+        .filter_map(|m| m.pointer("/normalTexture/index").and_then(|i| i.as_u64()))
+        .filter_map(|t| {
+            let t = usize::try_from(t).ok()?;
+            doc.get("textures")?
+                .as_array()?
+                .get(t)?
+                .get("source")?
+                .as_u64()
+        })
+        .collect();
+    for (k, img) in doc
         .get("images")
         .and_then(|i| i.as_array())
         .into_iter()
         .flatten()
+        .enumerate()
     {
+        if u64::try_from(k).is_ok_and(|k| normal_images.contains(&k)) {
+            continue;
+        }
         let Some(name) = img
             .get("uri")
             .and_then(|u| u.as_str())
@@ -435,10 +455,6 @@ fn level(
         else {
             continue;
         };
-        // a normal map is made from the grown texture, never grown itself
-        if name.ends_with("_normal.png") {
-            continue;
-        }
         let (path, original) = (textures.join(name), originals.join(name));
         let key = img
             .pointer("/extras/drahtseilakt/color_key")
