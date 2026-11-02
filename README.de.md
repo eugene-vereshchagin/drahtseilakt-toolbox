@@ -7,8 +7,15 @@ auf dem Rechner des Spielers und aus seiner eigenen Kopie des Spiels vor. Das Sp
 Level-Ordnern liegt; alles Schwere, was Level modern aussehen lässt, lebt hier, und das Spiel braucht nichts davon.
 
 ```
+drahtseilakt-toolbox                     (das Fenster)
 drahtseilakt-toolbox remaster [--scale N] [--model NAME] [--relief S] [--data DIR]
 ```
+
+Ohne Befehl gestartet öffnet die Toolbox ihr Fenster (Linux X11 oder Wayland, Windows, macOS): deine Kopie des
+Spiels, die Vergrößerung, das Real-ESRGAN-Modell, das Relief, ein Knopf Erstellen, der Fortschritt je Level und Teil
+mit Abbrechen, das Ergebnis und eine Textur vorher und nachher. Die Texte gibt es auf Englisch, Russisch, Deutsch
+und vereinfachtem Chinesisch, nach der Systemsprache oder im Fenster gewählt; Chinesisch nutzt eine Schrift des
+Systems (Noto CJK, Microsoft YaHei, PingFang...).
 
 `remaster` wandelt die Original-Level der Kopie nach `levels/remastered/` des Spiels (offenes Format), gibt jedem
 Level rundere Formen (ins Level neben die ursprünglichen Meshes geschrieben, die die Physik weiter benutzt, sodass

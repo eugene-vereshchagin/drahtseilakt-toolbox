@@ -12,6 +12,41 @@
 use gamedata::assets::{Data, Source};
 use image::{RgbaImage, imageops};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// How far a run has got, for a window to show while it goes on.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Progress {
+    /// Working on step `done + 1` of `total` (a level or a shared part), named `what`.
+    Step {
+        done: usize,
+        total: usize,
+        what: String,
+    },
+    /// A texture was made larger: its original and the new one.
+    Texture { original: PathBuf, grown: PathBuf },
+    /// One line of the result (as the command line prints them at the end).
+    Line(String),
+}
+
+/// What a run reports to and the flag that stops it (between textures, levels and parts).
+pub struct Watch<'a> {
+    pub report: &'a mut dyn FnMut(Progress),
+    pub cancel: &'a AtomicBool,
+}
+
+impl Watch<'_> {
+    fn stopped(&self) -> bool {
+        self.cancel.load(Ordering::Relaxed)
+    }
+}
+
+/// The line a run cancelled ends with.
+pub const CANCELLED: &str =
+    "cancelled: the levels made before are whole, the rest left as they were";
+/// What a level stopped among its textures is left as.
+const PART_GROWN: &str =
+    "stopped among its textures: some grown, the rest as they were (the next run grows them all)";
 
 /// The largest side a texture is made (GPU textures of 8K are common; the originals are 128 to 256).
 const SIDE_MAX: u32 = 8192;
@@ -24,20 +59,46 @@ const IMAGE_MAX: u64 = 64 * 1024 * 1024;
 /// Converts every original level the copy has that is not in levels/remastered yet, gives every level there its
 /// rounder shapes, and upscales its textures by `factor` (1: left as they are). Returns a line a level, and one for
 /// each texture left as it was.
-pub fn run(data: &Data, factor: u32, model: &str, relief_strength: f32) -> Result<Vec<String>, String> {
+pub fn run(
+    data: &Data,
+    factor: u32,
+    model: &str,
+    relief_strength: f32,
+) -> Result<Vec<String>, String> {
+    let cancel = AtomicBool::new(false);
+    let mut watch = Watch {
+        report: &mut |_| {},
+        cancel: &cancel,
+    };
     let root = gamedata::profile::dir(gamedata::profile::Kind::Remastered);
+    run_in(data, &root, factor, model, relief_strength, &mut watch)
+}
+
+/// [`run`] into the remastered folder `root`, reporting to `watch` and stopping when it is cancelled.
+pub fn run_in(
+    data: &Data,
+    root: &Path,
+    factor: u32,
+    model: &str,
+    relief_strength: f32,
+    watch: &mut Watch<'_>,
+) -> Result<Vec<String>, String> {
     let mut out = Vec::new();
+    let line = |out: &mut Vec<String>, watch: &mut Watch<'_>, l: String| {
+        (watch.report)(Progress::Line(l.clone()));
+        out.push(l);
+    };
     for n in 1..=data.level_count().unwrap_or(13) {
         let dir = root.join(format!("Level_{n:02}"));
         if std::fs::symlink_metadata(dir.join("level.gltf")).is_ok() {
             continue;
         }
-        let Ok(loaded) = data.load(&Source::Original(n)) else {
+        let Some(loaded) = from_copy(data, n) else {
             continue;
         };
         gamedata::assets::export(data, &loaded, &dir)?;
     }
-    let mut levels: Vec<PathBuf> = std::fs::read_dir(&root)
+    let mut levels: Vec<PathBuf> = std::fs::read_dir(root)
         .map_err(|e| format!("{}: {e}", root.display()))?
         .flatten()
         .map(|e| e.path())
@@ -49,7 +110,44 @@ pub fn run(data: &Data, factor: u32, model: &str, relief_strength: f32) -> Resul
         has_model(prog, model)?;
     }
     let esrgan = esrgan.as_deref().map(|p| (p, model));
-    for dir in levels {
+    // the parts every level shares (the balls, the modules, the transformer), remade the same way into .shared/,
+    // where the game takes their looks and textures for remastered levels
+    let mut parts = vec![
+        "3D Entities/Balls.nmo".to_owned(),
+        "3D Entities/AnimTrafo.nmo".to_owned(),
+    ];
+    if let Some(ph) = data.file("3D Entities/PH") {
+        // a folder that cannot be read leaves the shared parts but Balls and the transformer, and says so
+        let listed = std::fs::read_dir(&ph);
+        if let Err(e) = &listed {
+            line(&mut out, watch, format!("{}: {e}", ph.display()));
+        }
+        let mut names: Vec<String> = listed
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter_map(|e| e.file_name().to_str().map(str::to_owned))
+            .filter(|n| n.to_ascii_lowercase().ends_with(".nmo"))
+            .take(1024)
+            .collect();
+        names.sort();
+        parts.extend(names.into_iter().map(|n| format!("3D Entities/PH/{n}")));
+    }
+    let total = levels.len() + parts.len();
+    for (step, dir) in levels.into_iter().enumerate() {
+        if watch.stopped() {
+            line(&mut out, watch, CANCELLED.to_owned());
+            return Ok(out);
+        }
+        let what = dir
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        (watch.report)(Progress::Step {
+            done: step,
+            total,
+            what,
+        });
         // an original level is made again from the player's copy each time (what the game reads of it may have
         // grown since: a remastered level is only ever derived from it); any other level from its own file
         let original = dir
@@ -61,49 +159,72 @@ pub fn run(data: &Data, factor: u32, model: &str, relief_strength: f32) -> Resul
                     .ok()
                     .filter(|&k| format!("Level_{k:02}") == n)
             })
-            .and_then(|n| data.load(&Source::Original(n)).ok());
+            .and_then(|n| from_copy(data, n));
         match shapes(&dir, original.map(|l| l.level), data) {
-            Ok(n) => out.push(format!("{}: {n} meshes rounder", dir.display())),
-            Err(e) => out.push(format!("{}: shapes left as they were: {e}", dir.display())),
+            Ok(n) => line(
+                &mut out,
+                watch,
+                format!("{}: {n} meshes rounder", dir.display()),
+            ),
+            Err(e) => line(
+                &mut out,
+                watch,
+                format!("{}: shapes left as they were: {e}", dir.display()),
+            ),
         }
         if factor >= 2 {
-            match level(&dir, factor, esrgan, &mut out) {
-                Ok(n) => out.push(format!(
-                    "{}: {n} textures x{factor} ({})",
-                    dir.display(),
-                    if esrgan.is_some() {
-                        "Real-ESRGAN"
-                    } else {
-                        "Lanczos"
-                    }
-                )),
-                Err(e) => out.push(format!("{}: not remastered: {e}", dir.display())),
+            match level(&dir, factor, esrgan, &mut out, watch) {
+                Ok(n) => line(
+                    &mut out,
+                    watch,
+                    format!(
+                        "{}: {n} textures x{factor} ({})",
+                        dir.display(),
+                        if esrgan.is_some() {
+                            "Real-ESRGAN"
+                        } else {
+                            "Lanczos"
+                        }
+                    ),
+                ),
+                Err(e) => line(
+                    &mut out,
+                    watch,
+                    format!("{}: not remastered: {e}", dir.display()),
+                ),
             }
         }
+        // stopped among its textures: the level is left part grown (the next run grows it all again), no relief
+        if watch.stopped() {
+            line(&mut out, watch, format!("{}: {PART_GROWN}", dir.display()));
+            line(&mut out, watch, CANCELLED.to_owned());
+            return Ok(out);
+        }
         match relief(&dir, factor, relief_strength) {
-            Ok(n) => out.push(format!("{}: {n} normal maps", dir.display())),
-            Err(e) => out.push(format!("{}: no relief: {e}", dir.display())),
+            Ok(n) => line(
+                &mut out,
+                watch,
+                format!("{}: {n} normal maps", dir.display()),
+            ),
+            Err(e) => line(
+                &mut out,
+                watch,
+                format!("{}: no relief: {e}", dir.display()),
+            ),
         }
     }
-    // the parts every level shares (the balls, the modules, the transformer), remade the same way into .shared/,
-    // where the game takes their looks and textures for remastered levels
-    let mut parts = vec![
-        "3D Entities/Balls.nmo".to_owned(),
-        "3D Entities/AnimTrafo.nmo".to_owned(),
-    ];
-    if let Some(ph) = data.file("3D Entities/PH") {
-        let mut names: Vec<String> = std::fs::read_dir(&ph)
-            .map_err(|e| format!("{}: {e}", ph.display()))?
-            .flatten()
-            .filter_map(|e| e.file_name().to_str().map(str::to_owned))
-            .filter(|n| n.to_ascii_lowercase().ends_with(".nmo"))
-            .take(1024)
-            .collect();
-        names.sort();
-        parts.extend(names.into_iter().map(|n| format!("3D Entities/PH/{n}")));
-    }
+    let first = total - parts.len();
     let (mut made, mut grown, mut reliefs) = (0, 0, 0);
-    for rel in parts {
+    for (step, rel) in parts.into_iter().enumerate() {
+        if watch.stopped() {
+            line(&mut out, watch, CANCELLED.to_owned());
+            return Ok(out);
+        }
+        (watch.report)(Progress::Step {
+            done: first + step,
+            total,
+            what: rel.clone(),
+        });
         let Some(loaded) = data
             .file(&rel)
             .and_then(|p| gamedata::assets::load_nmo(&p).ok())
@@ -111,33 +232,56 @@ pub fn run(data: &Data, factor: u32, model: &str, relief_strength: f32) -> Resul
             continue;
         };
         let dir = gamedata::assets::remade_dir(&rel);
-        if let Err(e) = real_dirs(&root, &dir.join("textures")) {
-            out.push(format!("{rel}: not remade: {e}"));
+        if let Err(e) = real_dirs(root, &dir.join("textures")) {
+            line(&mut out, watch, format!("{rel}: not remade: {e}"));
             continue;
         }
         match shapes(&dir, Some(loaded.level), data) {
             Ok(_) => made += 1,
             Err(e) => {
-                out.push(format!("{rel}: not remade: {e}"));
+                line(&mut out, watch, format!("{rel}: not remade: {e}"));
                 continue;
             }
         }
         if factor >= 2 {
-            match level(&dir, factor, esrgan, &mut out) {
+            match level(&dir, factor, esrgan, &mut out, watch) {
                 Ok(n) => grown += n,
-                Err(e) => out.push(format!("{rel}: textures left as they were: {e}")),
+                Err(e) => line(
+                    &mut out,
+                    watch,
+                    format!("{rel}: textures left as they were: {e}"),
+                ),
             }
+        }
+        if watch.stopped() {
+            line(&mut out, watch, format!("{rel}: {PART_GROWN}"));
+            line(&mut out, watch, CANCELLED.to_owned());
+            return Ok(out);
         }
         match relief(&dir, factor, relief_strength) {
             Ok(n) => reliefs += n,
-            Err(e) => out.push(format!("{rel}: no relief: {e}")),
+            Err(e) => line(&mut out, watch, format!("{rel}: no relief: {e}")),
         }
     }
-    out.push(format!(
+    let summary = format!(
         "{}: {made} shared parts remade, {grown} of their textures x{factor}, {reliefs} normal maps",
         root.join(".shared").display()
-    ));
+    );
+    line(&mut out, watch, summary);
+    (watch.report)(Progress::Step {
+        done: total,
+        total,
+        what: String::new(),
+    });
     Ok(out)
+}
+
+/// Original level `n` from the copy's own file; none when the copy lacks it (the game then plays the remastered
+/// export in its place, which must never be made from itself).
+fn from_copy(data: &Data, n: u32) -> Option<gamedata::assets::LoadedLevel> {
+    matches!(data.original(n), Some(Source::Nmo(_)))
+        .then(|| data.load(&Source::Original(n)).ok())
+        .flatten()
 }
 
 /// Makes the folders from `root` down to `dir` one at a time, each a real folder (a link on the way is refused).
@@ -375,6 +519,32 @@ fn esrgan() -> Option<PathBuf> {
     beside.into_iter().chain(on_path).find(|f| f.is_file())
 }
 
+/// The Real-ESRGAN models there are (each with its `.param` and `.bin` beside the program), by name; none when
+/// Real-ESRGAN is not there.
+pub fn models() -> Vec<String> {
+    let Some(prog) = esrgan() else {
+        return Vec::new();
+    };
+    let Some(dir) = prog.parent().map(|d| d.join("models")) else {
+        return Vec::new();
+    };
+    let mut names: Vec<String> = std::fs::read_dir(&dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|e| {
+            e.file_name()
+                .to_str()?
+                .strip_suffix(".param")
+                .map(str::to_owned)
+        })
+        .filter(|n| has_model(&prog, n).is_ok())
+        .take(256)
+        .collect();
+    names.sort();
+    names
+}
+
 /// The model is one of Real-ESRGAN's: a plain name with its `.param` and `.bin` in `models/` beside the program.
 fn has_model(prog: &Path, model: &str) -> Result<(), String> {
     let plain = !model.is_empty()
@@ -405,6 +575,7 @@ fn level(
     factor: u32,
     esrgan: Option<(&Path, &str)>,
     notes: &mut Vec<String>,
+    watch: &mut Watch<'_>,
 ) -> Result<usize, String> {
     let gltf = dir.join("level.gltf");
     let small = real_file(&gltf) && std::fs::metadata(&gltf).is_ok_and(|m| m.len() <= GLTF_MAX);
@@ -449,6 +620,9 @@ fn level(
         .flatten()
         .enumerate()
     {
+        if watch.stopped() {
+            break;
+        }
         if u64::try_from(k).is_ok_and(|k| normal_images.contains(&k)) {
             continue;
         }
@@ -499,8 +673,18 @@ fn level(
             })
         };
         match one() {
-            Ok(()) => done += 1,
-            Err(e) => notes.push(format!("{}: left as it was: {e}", path.display())),
+            Ok(()) => {
+                done += 1;
+                (watch.report)(Progress::Texture {
+                    original: original.clone(),
+                    grown: path.clone(),
+                });
+            }
+            Err(e) => {
+                let l = format!("{}: left as it was: {e}", path.display());
+                (watch.report)(Progress::Line(l.clone()));
+                notes.push(l);
+            }
         }
     }
     if real_dir(&tmp) {
@@ -520,7 +704,7 @@ fn key_of(v: &serde_json::Value) -> Option<[u8; 3]> {
 }
 
 /// A texture, its size checked before it is decoded.
-fn load(path: &Path) -> Result<RgbaImage, String> {
+pub fn load(path: &Path) -> Result<RgbaImage, String> {
     let small = real_file(path) && std::fs::metadata(path).is_ok_and(|m| m.len() <= IMAGE_MAX);
     if !small {
         return Err(format!("{}: missing, a link or too big", path.display()));
@@ -827,6 +1011,117 @@ mod tests {
         // Lanczos keeps the tile's edges meeting: its left and right columns stay alike
         let big = lanczos(&tile, 4);
         assert_eq!(big.dimensions(), (16, 16));
+    }
+
+    /// A remastered folder with one level of one triangle and one 8x8 texture, outside any copy of the game.
+    fn one_level(name: &str) -> (PathBuf, Data) {
+        let root =
+            std::env::temp_dir().join(format!("drahtseilakt-run-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let dir = root.join("Mine");
+        let mut l = level::Level::default();
+        l.meshes.push(level::Mesh {
+            name: "t".into(),
+            positions: vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+            normals: vec![[0.0, 0.0, 1.0]; 3],
+            uvs: vec![[0.0; 2]; 3],
+            parts: vec![level::Part {
+                material: None,
+                indices: vec![0, 1, 2],
+            }],
+            channels: Vec::new(),
+            look: None,
+        });
+        l.textures.push(level::Texture {
+            name: "T".into(),
+            source: level::TextureSource::File("T.png".into()),
+            color_key: None,
+        });
+        level::open::export(&l, &dir).unwrap();
+        std::fs::create_dir_all(dir.join("textures")).unwrap();
+        let png = dir.join(level::open::texture_file(0, "T"));
+        image::save_buffer(
+            &png,
+            &[200u8; 8 * 8 * 4],
+            8,
+            8,
+            image::ExtendedColorType::Rgba8,
+        )
+        .unwrap();
+        // an empty copy of the game: no originals, no shared parts
+        let copy = root.join("copy");
+        std::fs::create_dir_all(&copy).unwrap();
+        (root, Data { root: copy })
+    }
+
+    #[test]
+    fn a_run_reports_its_steps_and_textures_as_it_goes() {
+        let (root, data) = one_level("progress");
+        let cancel = AtomicBool::new(false);
+        let mut seen = Vec::new();
+        let mut report = |p: Progress| seen.push(p);
+        let mut watch = Watch {
+            report: &mut report,
+            cancel: &cancel,
+        };
+        let out = run_in(&data, &root, 2, "realesrgan-x4plus", 0.0, &mut watch).unwrap();
+        assert!(
+            seen.iter()
+                .any(|p| matches!(p, Progress::Step { done: 0, total: 3, what } if what == "Mine")),
+            "{seen:?}"
+        );
+        assert!(
+            seen.iter().any(|p| matches!(p, Progress::Texture { .. })),
+            "{seen:?}"
+        );
+        assert!(seen.iter().any(|p| matches!(
+            p,
+            Progress::Step {
+                done: 3,
+                total: 3,
+                ..
+            }
+        )));
+        // every result line was reported as it came, in the same order
+        let lines: Vec<&String> = seen
+            .iter()
+            .filter_map(|p| {
+                if let Progress::Line(l) = p {
+                    Some(l)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert_eq!(lines, out.iter().collect::<Vec<_>>());
+        assert_eq!(
+            load(&root.join("Mine").join(level::open::texture_file(0, "T")))
+                .unwrap()
+                .width(),
+            16
+        );
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_cancelled_run_stops_and_says_so() {
+        let (root, data) = one_level("cancel");
+        let cancel = AtomicBool::new(true);
+        let mut report = |_| {};
+        let mut watch = Watch {
+            report: &mut report,
+            cancel: &cancel,
+        };
+        let out = run_in(&data, &root, 2, "realesrgan-x4plus", 0.0, &mut watch).unwrap();
+        assert_eq!(out, vec![CANCELLED.to_owned()]);
+        // nothing was touched
+        assert_eq!(
+            load(&root.join("Mine").join(level::open::texture_file(0, "T")))
+                .unwrap()
+                .width(),
+            8
+        );
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]
