@@ -8,15 +8,19 @@
 // and image code reads better with plain arithmetic and indexing of fixed-size arrays.
 #![allow(clippy::arithmetic_side_effects, clippy::indexing_slicing)]
 
+mod gui;
 mod normals;
 mod remaster;
 mod smooth;
+mod texts;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 const USAGE: &str = "\
-usage: drahtseilakt-toolbox <command> [options]
+usage: drahtseilakt-toolbox [<command>] [options]
+
+Without a command the toolbox opens its window.
 
 commands:
   remaster            convert the original levels the copy has into levels/remastered (the open format), give
@@ -87,10 +91,11 @@ fn main() -> ExitCode {
                 }
                 Ok(())
             }
-            Some("help") | None => {
+            Some("help") => {
                 print!("{USAGE}");
                 Ok(())
             }
+            None => gui::run(o.data),
             Some(c) => Err(format!("unknown command {c}\n\n{USAGE}")),
         }
     };
