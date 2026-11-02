@@ -66,20 +66,23 @@ pub fn run(data: &Data, factor: u32, model: &str) -> Result<Vec<String>, String>
             Ok(n) => out.push(format!("{}: {n} meshes rounder", dir.display())),
             Err(e) => out.push(format!("{}: shapes left as they were: {e}", dir.display())),
         }
-        if factor < 2 {
-            continue;
+        if factor >= 2 {
+            match level(&dir, factor, esrgan, &mut out) {
+                Ok(n) => out.push(format!(
+                    "{}: {n} textures x{factor} ({})",
+                    dir.display(),
+                    if esrgan.is_some() {
+                        "Real-ESRGAN"
+                    } else {
+                        "Lanczos"
+                    }
+                )),
+                Err(e) => out.push(format!("{}: not remastered: {e}", dir.display())),
+            }
         }
-        match level(&dir, factor, esrgan, &mut out) {
-            Ok(n) => out.push(format!(
-                "{}: {n} textures x{factor} ({})",
-                dir.display(),
-                if esrgan.is_some() {
-                    "Real-ESRGAN"
-                } else {
-                    "Lanczos"
-                }
-            )),
-            Err(e) => out.push(format!("{}: not remastered: {e}", dir.display())),
+        match relief(&dir, factor) {
+            Ok(n) => out.push(format!("{}: {n} normal maps", dir.display())),
+            Err(e) => out.push(format!("{}: no relief: {e}", dir.display())),
         }
     }
     // the parts every level shares (the balls, the modules, the transformer), remade the same way into .shared/,
@@ -99,7 +102,7 @@ pub fn run(data: &Data, factor: u32, model: &str) -> Result<Vec<String>, String>
         names.sort();
         parts.extend(names.into_iter().map(|n| format!("3D Entities/PH/{n}")));
     }
-    let (mut made, mut grown) = (0, 0);
+    let (mut made, mut grown, mut reliefs) = (0, 0, 0);
     for rel in parts {
         let Some(loaded) = data
             .file(&rel)
@@ -125,9 +128,13 @@ pub fn run(data: &Data, factor: u32, model: &str) -> Result<Vec<String>, String>
                 Err(e) => out.push(format!("{rel}: textures left as they were: {e}")),
             }
         }
+        match relief(&dir, factor) {
+            Ok(n) => reliefs += n,
+            Err(e) => out.push(format!("{rel}: no relief: {e}")),
+        }
     }
     out.push(format!(
-        "{}: {made} shared parts remade, {grown} of their textures x{factor}",
+        "{}: {made} shared parts remade, {grown} of their textures x{factor}, {reliefs} normal maps",
         root.join(".shared").display()
     ));
     Ok(out)
@@ -173,32 +180,7 @@ fn shapes(dir: &Path, fresh: Option<level::Level>, data: &Data) -> Result<usize,
         }
     };
     let n = crate::smooth::looks(&mut level);
-    // a fresh folder of our own to write into (one left from before is removed, links in it never followed)
-    let tmp = dir.join(".remaster-level");
-    match std::fs::symlink_metadata(&tmp) {
-        Ok(m) if m.is_dir() => {
-            std::fs::remove_dir_all(&tmp).map_err(|e| format!("{}: {e}", tmp.display()))?
-        }
-        Ok(_) => return Err(".remaster-level is not a folder".into()),
-        Err(_) => {}
-    }
-    std::fs::create_dir(&tmp).map_err(|e| format!("{}: {e}", tmp.display()))?;
-    level::open::export(&level, &tmp)?;
-    let names = ["level.bin", "level.gltf"];
-    for name in names {
-        let (from, to) = (tmp.join(name), dir.join(name));
-        if !real_file(&from) || !writable(&to) {
-            return Err(format!("{}: not a plain file", to.display()));
-        }
-    }
-    // both places were checked just above; the buffer moves first and the level file last. Should the system fail
-    // between the two, the level no longer loads (its accessors do not fit the new buffer, or it is refused); its
-    // folder is then removed and the toolbox run again, which exports it anew from the player's copy.
-    for name in names {
-        std::fs::rename(tmp.join(name), dir.join(name))
-            .map_err(|e| format!("{}: {e}", dir.join(name).display()))?;
-    }
-    let _ = std::fs::remove_dir(&tmp);
+    write_level(dir, &level)?;
     let textures = dir.join("textures");
     for (i, t) in level.textures.iter().enumerate() {
         let path = dir.join(level::open::texture_file(i, &t.name));
@@ -220,6 +202,106 @@ fn shapes(dir: &Path, fresh: Option<level::Level>, data: &Data) -> Result<usize,
         }
     }
     Ok(n)
+}
+
+/// Writes the level file (level.gltf and level.bin) of `dir` beside and moves it into place.
+fn write_level(dir: &Path, level: &level::Level) -> Result<(), String> {
+    // a fresh folder of our own to write into (one left from before is removed, links in it never followed)
+    let tmp = dir.join(".remaster-level");
+    match std::fs::symlink_metadata(&tmp) {
+        Ok(m) if m.is_dir() => {
+            std::fs::remove_dir_all(&tmp).map_err(|e| format!("{}: {e}", tmp.display()))?
+        }
+        Ok(_) => return Err(".remaster-level is not a folder".into()),
+        Err(_) => {}
+    }
+    std::fs::create_dir(&tmp).map_err(|e| format!("{}: {e}", tmp.display()))?;
+    level::open::export(level, &tmp)?;
+    let names = ["level.bin", "level.gltf"];
+    for name in names {
+        let (from, to) = (tmp.join(name), dir.join(name));
+        if !real_file(&from) || !writable(&to) {
+            return Err(format!("{}: not a plain file", to.display()));
+        }
+    }
+    // both places were checked just above; the buffer moves first and the level file last. Should the system fail
+    // between the two, the level no longer loads (its accessors do not fit the new buffer, or it is refused); its
+    // folder is then removed and the toolbox run again, which exports it anew from the player's copy.
+    for name in names {
+        std::fs::rename(tmp.join(name), dir.join(name))
+            .map_err(|e| format!("{}: {e}", dir.join(name).display()))?;
+    }
+    let _ = std::fs::remove_dir(&tmp);
+    Ok(())
+}
+
+/// Gives the level's lit, opaque or alpha-tested materials a normal map made from their texture as it is now (after
+/// the upscale), written into textures/ beside the others and named in the level file. A level that has normal maps
+/// already (one not made from the copy anew) is left as it is. Returns how many maps were made.
+fn relief(dir: &Path, scale: u32) -> Result<usize, String> {
+    let mut level = level::open::import(dir)?;
+    if level.materials.iter().any(|m| m.normal.is_some()) {
+        return Ok(0);
+    }
+    if !real_dir(&dir.join("textures")) {
+        return Err("textures/ missing or a link".into());
+    }
+    let mut made: std::collections::HashMap<usize, usize> = std::collections::HashMap::new();
+    for k in 0..level.materials.len() {
+        let Some(m) = level.materials.get(k) else {
+            continue;
+        };
+        let Some(t) = m
+            .texture
+            .filter(|_| !m.unlit && m.texgen.is_none() && m.blend.is_none())
+        else {
+            continue;
+        };
+        let normal = match made.get(&t) {
+            Some(&n) => n,
+            None => {
+                let Some(base) = level.textures.get(t) else {
+                    continue;
+                };
+                let file = dir.join(level::open::texture_file(t, &base.name));
+                let Ok(img) = load(&file) else { continue };
+                // a tiny texture (a reflection map, a gradient) has no relief to give, as it has no detail to grow
+                let original = file
+                    .file_name()
+                    .map(|n| dir.join("textures.original").join(n))
+                    .and_then(|o| load(&o).ok());
+                let (ow, oh) = original
+                    .as_ref()
+                    .map_or(img.dimensions(), |o| o.dimensions());
+                if ow.min(oh) < ESRGAN_MIN_SIDE {
+                    continue;
+                }
+                let grown = (img.width() / ow.max(1)).max(1).min(scale.max(1));
+                let map = crate::normals::normal_map(&img, grown, crate::normals::STRENGTH);
+                let name = format!("{}_normal", base.name);
+                let n = level.textures.len();
+                let path = dir.join(level::open::texture_file(n, &name));
+                replace(&path, |tmp| {
+                    map.save_with_format(tmp, image::ImageFormat::Png)
+                        .map_err(|e| e.to_string())
+                })?;
+                level.textures.push(level::Texture {
+                    name,
+                    source: level::TextureSource::File(path.to_string_lossy().into_owned()),
+                    color_key: None,
+                });
+                made.insert(t, n);
+                n
+            }
+        };
+        if let Some(m) = level.materials.get_mut(k) {
+            m.normal = Some(normal);
+        }
+    }
+    if !made.is_empty() {
+        write_level(dir, &level)?;
+    }
+    Ok(made.len())
 }
 
 /// A directory itself, not a link to one.
@@ -293,14 +375,22 @@ fn esrgan() -> Option<PathBuf> {
 fn has_model(prog: &Path, model: &str) -> Result<(), String> {
     let plain = !model.is_empty()
         && model.len() <= 64
-        && model.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
+        && model
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
         && !model.starts_with('.');
     let models = prog.parent().map(|d| d.join("models"));
-    let there = models.is_some_and(|m| ["param", "bin"].iter().all(|e| real_file(&m.join(format!("{model}.{e}")))));
+    let there = models.is_some_and(|m| {
+        ["param", "bin"]
+            .iter()
+            .all(|e| real_file(&m.join(format!("{model}.{e}"))))
+    });
     if plain && there {
         Ok(())
     } else {
-        Err(format!("Real-ESRGAN has no model {model:?} in its models/ folder"))
+        Err(format!(
+            "Real-ESRGAN has no model {model:?} in its models/ folder"
+        ))
     }
 }
 
@@ -345,6 +435,10 @@ fn level(
         else {
             continue;
         };
+        // a normal map is made from the grown texture, never grown itself
+        if name.ends_with("_normal.png") {
+            continue;
+        }
         let (path, original) = (textures.join(name), originals.join(name));
         let key = img
             .pointer("/extras/drahtseilakt/color_key")
@@ -484,25 +578,35 @@ fn lanczos(img: &RgbaImage, factor: u32) -> RgbaImage {
     let (w, h) = target(img.width(), img.height(), factor);
     let f = w / img.width().max(1);
     let p = margin(img);
-    let big = imageops::resize(&padded(img, p), w + 2 * p * f, h + 2 * p * f, imageops::FilterType::Lanczos3);
+    let big = imageops::resize(
+        &padded(img, p),
+        w + 2 * p * f,
+        h + 2 * p * f,
+        imageops::FilterType::Lanczos3,
+    );
     let big = imageops::crop_imm(&big, p * f, p * f, w, h).to_image();
     imageops::unsharpen(&big, 0.6 * (f as f32).sqrt(), 2)
 }
 
 /// The margin a texture gets around it while it grows: an eighth of its shorter side, at least 4 texels.
 fn margin(img: &RgbaImage) -> u32 {
-    (img.width().min(img.height()) / 8).max(4).min(img.width().min(img.height()))
+    (img.width().min(img.height()) / 8)
+        .max(4)
+        .min(img.width().min(img.height()))
 }
 
 /// The texture repeats as a tile: across its edges it changes no more than twice as much as within (a decal or a
 /// picture does not, its edges do not meet).
-fn tiles(img: &RgbaImage) -> bool {
+pub fn tiles(img: &RgbaImage) -> bool {
     let (w, h) = img.dimensions();
     if w < 2 || h < 2 {
         return false;
     }
     let d = |a: &image::Rgba<u8>, b: &image::Rgba<u8>| -> u64 {
-        a.0.iter().zip(b.0).map(|(x, y)| u64::from(x.abs_diff(y))).sum()
+        a.0.iter()
+            .zip(b.0)
+            .map(|(x, y)| u64::from(x.abs_diff(y)))
+            .sum()
     };
     let (mut across, mut within) = (0u64, 0u64);
     for y in 0..h {
@@ -534,7 +638,10 @@ fn padded(img: &RgbaImage, p: u32) -> RgbaImage {
     };
     let mut out = RgbaImage::new(w + 2 * p, h + 2 * p);
     for (x, y, px) in out.enumerate_pixels_mut() {
-        *px = *img.get_pixel(at(i64::from(x) - i64::from(p), w), at(i64::from(y) - i64::from(p), h));
+        *px = *img.get_pixel(
+            at(i64::from(x) - i64::from(p), w),
+            at(i64::from(y) - i64::from(p), h),
+        );
     }
     out
 }
