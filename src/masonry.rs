@@ -83,7 +83,7 @@ pub fn map(original: &RgbaImage, grown: (u32, u32)) -> RgbaImage {
     let wrap = crate::remaster::tiles(original);
     let brick: Vec<f32> = original.pixels().map(brickness).collect();
     // the band of bricks: near a brick; there what is not a brick is mortar
-    let near = blur(&brick, wi, hi, 2, wrap);
+    let near = blur(brick.clone(), wi, hi, 2, wrap);
     let height: Vec<f32> = brick
         .iter()
         .zip(&near)
@@ -117,7 +117,7 @@ pub fn map(original: &RgbaImage, grown: (u32, u32)) -> RgbaImage {
     let (bw, bh) = (gw as usize, gh as usize);
     let scale = (gw / w.max(1)).max(1) as usize;
     // a narrow bevel: flat tops, edges leaning over about a quarter of an original texel
-    let big = blur(&big, bw, bh, (scale / 4).max(1), wrap);
+    let big = blur(big, bw, bh, (scale / 4).max(1), wrap);
     let get = |x: i64, y: i64| big.get(address(y, bh, wrap) * bw + address(x, bw, wrap)).copied().unwrap_or(0.55);
     // the slope over one texel of the original: a brick's edge leans as far at any size
     let d = scale.div_ceil(2).max(1) as i64;
@@ -149,29 +149,33 @@ fn address(i: i64, n: usize, wrap: bool) -> usize {
 }
 
 /// A box blur of radius `r`, the edges read as `address` does.
-fn blur(v: &[f32], w: usize, h: usize, r: usize, wrap: bool) -> Vec<f32> {
+fn blur(mut v: Vec<f32>, w: usize, h: usize, r: usize, wrap: bool) -> Vec<f32> {
+    // a box blur along the rows, then the columns, each as a running sum: the same work at any radius (a texture
+    // grown 128 times took ~9G taps one texel at a time); the second pass writes back into the first's input
     let r = r as i64;
-    let k = (2 * r + 1) as f32;
+    let k = (2 * r + 1) as f64;
     let mut rows = vec![0.0f32; v.len()];
     for y in 0..h {
-        for x in 0..w {
-            let s: f32 = (-r..=r).map(|d| v.get(y * w + address(x as i64 + d, w, wrap)).copied().unwrap_or(0.0)).sum();
-            if let Some(o) = rows.get_mut(y * w + x) {
-                *o = s / k;
+        let at = |x: i64| f64::from(v.get(y * w + address(x, w, wrap)).copied().unwrap_or(0.0));
+        let mut s: f64 = (-r..=r).map(at).sum();
+        for x in 0..w as i64 {
+            if let Some(o) = rows.get_mut(y * w + x as usize) {
+                *o = (s / k) as f32;
             }
+            s += at(x + r + 1) - at(x - r);
         }
     }
-    let mut out = vec![0.0f32; v.len()];
-    for y in 0..h {
-        for x in 0..w {
-            let s: f32 =
-                (-r..=r).map(|d| rows.get(address(y as i64 + d, h, wrap) * w + x).copied().unwrap_or(0.0)).sum();
-            if let Some(o) = out.get_mut(y * w + x) {
-                *o = s / k;
+    for x in 0..w {
+        let at = |y: i64| f64::from(rows.get(address(y, h, wrap) * w + x).copied().unwrap_or(0.0));
+        let mut s: f64 = (-r..=r).map(at).sum();
+        for y in 0..h as i64 {
+            if let Some(o) = v.get_mut(y as usize * w + x) {
+                *o = (s / k) as f32;
             }
+            s += at(y + r + 1) - at(y - r);
         }
     }
-    out
+    v
 }
 
 #[cfg(test)]

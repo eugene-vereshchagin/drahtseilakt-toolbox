@@ -393,10 +393,39 @@ fn write_level(dir: &Path, level: &level::Level) -> Result<(), String> {
 /// already (one not made from the copy anew) is left as it is. Returns how many maps were made.
 /// One remastered level's folder: its relief made again, its normal maps removed from the level first.
 pub fn relief_folder(dir: &Path, scale: u32, strength: f32) -> Result<usize, String> {
+    // a remastered level's own folder only (the toolbox made it: its originals kept beside), never a link to one
+    if !real_dir(dir) || !real_dir(&dir.join("textures.original")) || !real_file(&dir.join("level.gltf")) {
+        return Err(format!("{}: not a remastered level's folder", dir.display()));
+    }
     let mut level = level::open::import(dir)?;
+    // the textures that were only normal maps go, with their files, so that a second run does not add another set
+    let used_as_normal: std::collections::HashSet<usize> = level.materials.iter().filter_map(|m| m.normal).collect();
+    let used_as_texture: std::collections::HashSet<usize> =
+        level.materials.iter().filter_map(|m| m.texture).collect();
+    // texture files are named by their index: only the normal maps at the end (where the relief puts them) can go
+    // without renaming the others; any before them are left as they are
+    let n = level.textures.len();
+    let tail_from = (0..n).rev().take_while(|i| used_as_normal.contains(i) && !used_as_texture.contains(i)).last();
+    let mut map = Vec::with_capacity(n);
+    let mut kept = Vec::new();
+    for (i, t) in std::mem::take(&mut level.textures).into_iter().enumerate() {
+        if tail_from.is_some_and(|f| i >= f) {
+            let file = dir.join(level::open::texture_file(i, &t.name));
+            // the file itself or a link put there: removed, never followed
+            if std::fs::symlink_metadata(&file).is_ok_and(|m| !m.is_dir()) {
+                let _ = std::fs::remove_file(&file);
+            }
+            map.push(None);
+        } else {
+            map.push(Some(kept.len()));
+            kept.push(t);
+        }
+    }
+    level.textures = kept;
     for m in &mut level.materials {
         m.normal = None;
         m.parallax = 0.0;
+        m.texture = m.texture.and_then(|t| map.get(t).copied().flatten());
     }
     write_level(dir, &level)?;
     relief(dir, scale, strength)
