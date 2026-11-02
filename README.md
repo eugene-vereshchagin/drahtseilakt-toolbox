@@ -48,6 +48,9 @@ names are made safe for Linux, Windows and macOS (no reserved names, no trailing
 characters cut at a word with "…", a second "Hello Mars" becomes "Hello Mars (2)"). Links are never followed, depth
 and counts are capped, the source is only read, and each level is written into a hidden folder and renamed into
 place. A second run adds only what is new. The window has the same as a field and an Import button.
+Unpack a download outside `levels/community/` (in Downloads, say): a source inside the folder it imports into is
+refused. A folder of the download that cannot be read is skipped and named; names printed have control characters
+escaped.
 
 The toolbox never goes online and never touches the player's original copy.
 
@@ -56,5 +59,11 @@ The toolbox never goes online and never touches the player's original copy.
 The toolbox shares the level reading with the game: it needs a checkout of the game's repository beside this one,
 at `../ballance/drahtseilakt`. Then `cargo build --release --offline`. For Real-ESRGAN, unpack the pinned download
 into `third_party/realesrgan/` and link `target/release/realesrgan` to it.
+
+## Who made it
+
+The code and the documentation are written by **Claude** (Anthropic's AI model, working in Claude Code). **Veresk**
+leads the project: the idea, the decisions, the plan and the judgement of what is right. The commits carry both
+names.
 
 GPL-3.0-only, as the game.

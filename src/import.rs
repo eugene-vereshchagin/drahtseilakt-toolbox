@@ -101,7 +101,7 @@ pub fn import(
         let bytes = match read_capped(&m.file, NMO_MAX) {
             Ok(b) => b,
             Err(e) => {
-                tell(format!("skipped {}: {e}", rel.display()));
+                tell(format!("skipped {}: {}", shown(&rel), printable(&e)));
                 summary.failed.push(format!("{}: {e}", rel.display()));
                 continue;
             }
@@ -119,34 +119,64 @@ pub fn import(
                 .or_else(|_| kept.strip_prefix(&dst))
                 .unwrap_or(&kept)
                 .to_path_buf();
-            tell(format!("same as {}: {}", kept_rel.display(), rel.display()));
+            tell(format!("same as {}: {}", shown(&kept_rel), shown(&rel)));
             summary.duplicates.push((rel, kept_rel));
             continue;
         }
-        by_hash.entry(key).or_default().push(m.file.clone());
         let title = title_for(&m.file, &src);
-        let name = unique(&title, &mut taken);
-        match write_level(&dst, &name, &title, &rel, &bytes, &m.file) {
-            Ok(()) => {
+        match write_named(&dst, &title, &mut taken, &rel, &bytes, &m.file) {
+            Ok(name) => {
+                // counted as imported only once it is there
+                by_hash.entry(key).or_default().push(m.file.clone());
                 summary.imported += 1;
-                tell(format!("{name}  <-  {}", rel.display()));
+                tell(format!("{}  <-  {}", printable(&name), shown(&rel)));
             }
             Err(e) => {
-                tell(format!("failed {}: {e}", rel.display()));
+                let e = match e {
+                    Written::Exists => "no free folder name".to_owned(),
+                    Written::Failed(e) => e,
+                };
+                tell(format!("failed {}: {}", shown(&rel), printable(&e)));
                 summary.failed.push(format!("{}: {e}", rel.display()));
             }
         }
     }
     for a in &summary.archives {
-        tell(format!(
-            "archive not opened (unpack it and import again): {}",
-            a.display()
-        ));
+        tell(format!("archive not opened (unpack it and import again): {}", shown(a)));
     }
     for l in &summary.links {
-        tell(format!("link not followed: {}", l.display()));
+        tell(format!("link not followed: {}", shown(l)));
     }
     Ok(summary)
+}
+
+/// How often a map tries the next numbered name when the disk has its name in another form.
+const NAME_TRIES: usize = 100;
+
+/// Why a level folder was not written.
+#[derive(Debug)]
+enum Written {
+    /// A folder of that name is there (perhaps in another case or Unicode form).
+    Exists,
+    Failed(String),
+}
+
+/// A name safe to print on a terminal: control and invisible format characters (escape sequences, direction
+/// overrides) shown as `\u{..}` escapes.
+fn printable(s: &str) -> String {
+    s.chars()
+        .map(|c| {
+            if c.is_control() || is_format(c) {
+                c.escape_unicode().to_string()
+            } else {
+                c.to_string()
+            }
+        })
+        .collect()
+}
+
+fn shown(p: &Path) -> String {
+    printable(&p.to_string_lossy())
 }
 
 /// One line saying what an import did.
@@ -154,7 +184,7 @@ pub fn summary_line(s: &Summary, to: &Path) -> String {
     format!(
         "{} levels made in {}; {} the same as another, {} archives not opened, {} links not followed, {} failed",
         s.imported,
-        to.display(),
+        shown(to),
         s.duplicates.len(),
         s.archives.len(),
         s.links.len(),
@@ -164,8 +194,18 @@ pub fn summary_line(s: &Summary, to: &Path) -> String {
 
 /// Collects the `.nmo` files under `dir`, the archives and the links, never following a link.
 fn walk(dir: &Path, depth: usize, seen: &mut usize, maps: &mut Vec<Found>, s: &mut Summary) -> Result<(), String> {
-    let read = std::fs::read_dir(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    let mut entries: Vec<std::fs::DirEntry> = read.flatten().collect();
+    let read = match std::fs::read_dir(dir) {
+        Ok(r) => r,
+        // an unreadable folder inside the download is skipped and reported; the download itself must be readable
+        Err(e) if depth > 0 => {
+            s.failed.push(format!("{}: {e}, not looked into", dir.display()));
+            return Ok(());
+        }
+        Err(e) => return Err(format!("{}: {e}", dir.display())),
+    };
+    // never more than the cap is gathered, however large the folder
+    let room = ENTRIES_MAX.saturating_sub(*seen).saturating_add(1);
+    let mut entries: Vec<std::fs::DirEntry> = read.flatten().take(room).collect();
     entries.sort_by_key(std::fs::DirEntry::file_name);
     for e in entries {
         *seen = seen.saturating_add(1);
@@ -322,6 +362,27 @@ fn folder_name(title: &str) -> String {
 
 /// `folder_name` in at most `max` characters, a longer one cut at a word and ended in "…".
 fn fit_name(title: &str, max: usize) -> String {
+    let name = fit_plain(title, max);
+    if !reserved(&name) {
+        return name;
+    }
+    // a device name gets "_" after its base, before any extension ("nul.txt" -> "nul_.txt", "Aux.Level.nmo" ->
+    // "Aux_.Level.nmo"), within the cap
+    let name = if name.chars().count() >= max && max > 1 {
+        fit_plain(title, max - 1)
+    } else {
+        name
+    };
+    let at = name.find('.').unwrap_or(name.len());
+    format!(
+        "{}_{}",
+        name.get(..at).unwrap_or_default(),
+        name.get(at..).unwrap_or_default()
+    )
+}
+
+/// `fit_name` without the device names' "_".
+fn fit_plain(title: &str, max: usize) -> String {
     let replaced: String = title
         .chars()
         .map(|c| {
@@ -340,8 +401,7 @@ fn fit_name(title: &str, max: usize) -> String {
         .trim_start_matches(['.', ' '])
         .trim_end_matches(['.', ' '])
         .to_owned();
-    let name = if name.is_empty() { "Level".to_owned() } else { name };
-    if reserved(&name) { format!("{name}_") } else { name }
+    if name.is_empty() { "Level".to_owned() } else { name }
 }
 
 /// Windows' device names, alone or before an extension ("CON", "nul.txt", "COM1", "LPT9.nmo").
@@ -402,9 +462,44 @@ fn existing_names(dir: &Path) -> HashSet<String> {
         .unwrap_or_default()
 }
 
+/// Writes the level folder for `title` under the first free name: a name the disk already has in another form
+/// (case, Unicode normalisation), unknown to `taken`, takes the next number.
+fn write_named(
+    to: &Path,
+    title: &str,
+    taken: &mut HashSet<String>,
+    rel: &Path,
+    bytes: &[u8],
+    file: &Path,
+) -> Result<String, Written> {
+    let mut outcome = Err(Written::Exists);
+    for _ in 0..NAME_TRIES {
+        let name = unique(title, taken);
+        outcome = write_level(to, &name, title, rel, bytes, file).map(|()| name);
+        if !matches!(outcome, Err(Written::Exists)) {
+            break;
+        }
+    }
+    outcome
+}
+
 /// Writes the level folder `to/name`: the map, its preview, level.txt; into a hidden folder first, renamed into
 /// place when complete.
-fn write_level(to: &Path, name: &str, title: &str, rel: &Path, bytes: &[u8], file: &Path) -> Result<(), String> {
+fn write_level(to: &Path, name: &str, title: &str, rel: &Path, bytes: &[u8], file: &Path) -> Result<(), Written> {
+    // a name the disk has in another case or Unicode form is found here (case-insensitive and normalising systems)
+    if std::fs::symlink_metadata(to.join(name)).is_ok() {
+        return Err(Written::Exists);
+    }
+    write_level_files(to, name, title, rel, bytes, file).map_err(|e| {
+        if std::fs::symlink_metadata(to.join(name)).is_ok() {
+            Written::Exists
+        } else {
+            Written::Failed(e)
+        }
+    })
+}
+
+fn write_level_files(to: &Path, name: &str, title: &str, rel: &Path, bytes: &[u8], file: &Path) -> Result<(), String> {
     let fail = |p: &Path, e: std::io::Error| format!("{}: {e}", p.display());
     let tmp = to.join(format!(".import-{}-{}", std::process::id(), fnv1a(name.as_bytes())));
     if std::fs::symlink_metadata(&tmp).is_ok() {
@@ -558,7 +653,15 @@ mod tests {
         assert_eq!(folder_name("a<b>c:d\"e/f\\g|h?i*j"), "a b c d e f g h i j");
         assert_eq!(folder_name("  ..hidden. . "), "hidden");
         assert_eq!(folder_name("CON"), "CON_");
-        assert_eq!(folder_name("nul.txt"), "nul.txt_");
+        assert_eq!(folder_name("nul.txt"), "nul_.txt");
+        assert_eq!(folder_name("Aux.Level.nmo"), "Aux_.Level.nmo");
+        assert_eq!(folder_name("com1 .x"), "com1 _.x");
+        let long = format!("CON.{}", "x".repeat(60));
+        let capped = folder_name(&long);
+        assert!(
+            capped.starts_with("CON_.") && capped.chars().count() <= NAME_MAX,
+            "{capped}"
+        );
         assert_eq!(folder_name("COM1"), "COM1_");
         assert_eq!(folder_name("Console"), "Console");
         assert_eq!(folder_name("\u{202e}\u{7}"), "Level");
@@ -581,6 +684,60 @@ mod tests {
         let long = "Ballance Skyscraper (3D Maze; Hard Ver.-Blind) v1.2.2";
         assert_eq!(unique(long, &mut taken), "Ballance Skyscraper (3D Maze; Hard…");
         assert_eq!(unique(long, &mut taken), "Ballance Skyscraper (3D Maze; Hard… (2)");
+    }
+
+    #[test]
+    fn printed_names_cannot_drive_the_terminal() {
+        assert_eq!(printable("a\u{1b}[2Jb\u{7}\u{202e}"), "a\\u{1b}[2Jb\\u{7}\\u{202e}");
+        assert_eq!(shown(Path::new("ok/name")), "ok/name");
+    }
+
+    #[test]
+    fn a_name_the_disk_has_in_another_form_takes_the_next_number() {
+        let dst = temp("fold");
+        let src = temp("fold-src");
+        std::fs::write(src.join("Map.nmo"), b"m").unwrap();
+        // the disk has "Map" though `taken` does not know it (as a case-insensitive or normalising system would)
+        std::fs::create_dir_all(dst.join("Map")).unwrap();
+        let mut taken = HashSet::new();
+        assert!(matches!(
+            write_level(&dst, "Map", "Map", Path::new("Map.nmo"), b"m", &src.join("Map.nmo")),
+            Err(Written::Exists)
+        ));
+        let name = write_named(
+            &dst,
+            "Map",
+            &mut taken,
+            Path::new("Map.nmo"),
+            b"m",
+            &src.join("Map.nmo"),
+        )
+        .unwrap();
+        assert_eq!(name, "Map (2)");
+        assert!(dst.join("Map (2)/Map.nmo").is_file());
+        let _ = std::fs::remove_dir_all(&dst);
+        let _ = std::fs::remove_dir_all(&src);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_unreadable_folder_is_skipped_and_reported() {
+        use std::os::unix::fs::PermissionsExt;
+        let src = temp("unread");
+        let dst = temp("unread-dst");
+        std::fs::create_dir_all(src.join("locked")).unwrap();
+        std::fs::write(src.join("locked/x.nmo"), b"x").unwrap();
+        std::fs::write(src.join("open.nmo"), b"o").unwrap();
+        std::fs::set_permissions(src.join("locked"), std::fs::Permissions::from_mode(0o000)).unwrap();
+        let readable = std::fs::read_dir(src.join("locked")).is_ok(); // root reads it anyway
+        let s = import(&src, &dst, &mut |_| {}, &GO);
+        std::fs::set_permissions(src.join("locked"), std::fs::Permissions::from_mode(0o755)).unwrap();
+        let s = s.unwrap();
+        if !readable {
+            assert_eq!((s.imported, s.failed.len()), (1, 1));
+        }
+        let _ = std::fs::remove_dir_all(&src);
+        let _ = std::fs::remove_dir_all(&dst);
     }
 
     #[test]

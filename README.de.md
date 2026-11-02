@@ -50,6 +50,9 @@ Namen, keine Punkte oder Leerzeichen am Ende, höchstens 40 Zeichen, an einer Wo
 „Hello Mars“ wird „Hello Mars (2)“). Links werden nie verfolgt, Tiefe und Anzahl sind begrenzt, die Quelle wird nur
 gelesen, und jedes Level wird in einen versteckten Ordner geschrieben und an seinen Platz umbenannt. Ein zweiter Lauf
 fügt nur Neues hinzu. Das Fenster hat dasselbe als Feld und Import-Knopf.
+Einen Download außerhalb von `levels/community/` entpacken (etwa in Downloads): eine Quelle im Zielordner wird
+abgelehnt. Ein unlesbarer Ordner des Downloads wird übersprungen und genannt; ausgegebene Namen haben ihre
+Steuerzeichen maskiert.
 
 Die Toolbox geht nie online und fasst die Originalkopie des Spielers nie an.
 
@@ -58,5 +61,10 @@ Die Toolbox geht nie online und fasst die Originalkopie des Spielers nie an.
 Das Lesen der Level teilt die Toolbox mit dem Spiel: Sie braucht einen Klon des Spiel-Repositorys daneben, unter
 `../ballance/drahtseilakt`. Dann `cargo build --release --offline`. Für Real-ESRGAN den festgelegten Download nach
 `third_party/realesrgan/` entpacken und `target/release/realesrgan` darauf verlinken.
+
+## Wer es gemacht hat
+
+Code und Dokumentation schreibt **Claude** (das KI-Modell von Anthropic, in Claude Code). **Veresk** führt das
+Projekt: die Idee, die Entscheidungen, der Plan und das Urteil, was stimmt. Die Commits tragen beide Namen.
 
 GPL-3.0-only, wie das Spiel.
