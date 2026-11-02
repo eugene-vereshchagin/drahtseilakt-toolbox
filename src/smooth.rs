@@ -59,6 +59,8 @@ struct Bend {
 /// at one end only (a corner between two straight runs, or where a straight rail meets its curve) bends lopsided: it
 /// may, but only a little ([`MAX_LOPSIDED_BOW`]), so a corner is rounded while a long rail does not bend into a wave.
 const ARC_LIKE: f32 = 0.2;
+/// An edge longer than this many times the edge it goes on into is a straight run, never bent.
+const RUN_RATIO: f32 = 2.5;
 /// The most a lopsided edge may bow, in level units.
 const MAX_LOPSIDED_BOW: f32 = 0.1;
 
@@ -151,6 +153,29 @@ pub fn mesh(m: &Mesh) -> Option<Mesh> {
         .collect();
     let corners = corner_normals(m, &tris)?;
     // every edge's most bending normals
+    // the corners each corner is joined to by an edge, to find how a line of edges goes on past a corner
+    let mut joined: HashMap<[i64; 3], Vec<Vec3>> = HashMap::new();
+    for t in &tris {
+        for (a, b) in [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])] {
+            let (Some(pa), Some(pb)) = (pos(a), pos(b)) else {
+                return None;
+            };
+            joined.entry(key(pa)).or_default().push(pb);
+            joined.entry(key(pb)).or_default().push(pa);
+        }
+    }
+    // The edge from `from` to `at` goes on past `at` along the edge most nearly in line with it: its length, if any
+    // goes on within 45 degrees.
+    let goes_on = |from: Vec3, at: Vec3| -> Option<f32> {
+        let dir = (at - from).normalize_or_zero();
+        joined
+            .get(&key(at))?
+            .iter()
+            .map(|&p| (p - at, (p - at).normalize_or_zero().dot(dir)))
+            .filter(|&(_, along)| along > 0.7)
+            .max_by(|x, y| x.1.total_cmp(&y.1))
+            .map(|(d, _)| d.length())
+    };
     let mut bends: HashMap<([i64; 3], [i64; 3]), Bend> = HashMap::new();
     let mut size = 0.0f32;
     for (t, n) in tris.iter().zip(&corners) {
@@ -173,7 +198,14 @@ pub fn mesh(m: &Mesh) -> Option<Mesh> {
                 (pb, pa, nb, na, (kb, ka))
             };
             let mut e = bend(lo, hi, n_lo, n_hi);
-            if e.amount / 8.0 > MAX_BOW {
+            // a round thing is cut into pieces of about one length; an edge far longer than the one it goes on into
+            // is a straight run meeting a curve (a rail before its bend), which must stay straight
+            let len = lo.distance(hi);
+            let run = [goes_on(hi, lo), goes_on(lo, hi)]
+                .into_iter()
+                .flatten()
+                .any(|next| len > RUN_RATIO * next);
+            if run || e.amount / 8.0 > MAX_BOW {
                 e = bend(lo, hi, Vec3::ZERO, Vec3::ZERO);
             }
             let keep = bends.get(&k).is_some_and(|old| old.amount >= e.amount);

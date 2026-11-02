@@ -15,6 +15,8 @@ use std::path::{Path, PathBuf};
 
 /// The largest side a texture is made (GPU textures of 8K are common; the originals are 128 to 256).
 const SIDE_MAX: u32 = 8192;
+/// The smallest side of a texture Real-ESRGAN is given; smaller ones are resampled with Lanczos.
+const ESRGAN_MIN_SIDE: u32 = 64;
 /// The largest level file and texture read.
 const GLTF_MAX: u64 = 64 * 1024 * 1024;
 const IMAGE_MAX: u64 = 64 * 1024 * 1024;
@@ -44,7 +46,19 @@ pub fn run(data: &Data, factor: u32) -> Result<Vec<String>, String> {
     levels.sort();
     let esrgan = esrgan();
     for dir in levels {
-        match shapes(&dir) {
+        // an original level is made again from the player's copy each time (what the game reads of it may have
+        // grown since: a remastered level is only ever derived from it); any other level from its own file
+        let original = dir
+            .file_name()
+            .and_then(|n| n.to_str())
+            .and_then(|n| n.strip_prefix("Level_").map(|d| (n, d)))
+            .and_then(|(n, d)| {
+                d.parse::<u32>()
+                    .ok()
+                    .filter(|&k| format!("Level_{k:02}") == n)
+            })
+            .and_then(|n| data.load(&Source::Original(n)).ok());
+        match shapes(&dir, original.map(|l| l.level), data) {
             Ok(n) => out.push(format!("{}: {n} meshes rounder", dir.display())),
             Err(e) => out.push(format!("{}: shapes left as they were: {e}", dir.display())),
         }
@@ -64,23 +78,96 @@ pub fn run(data: &Data, factor: u32) -> Result<Vec<String>, String> {
             Err(e) => out.push(format!("{}: not remastered: {e}", dir.display())),
         }
     }
+    // the parts every level shares (the balls, the modules, the transformer), remade the same way into .shared/,
+    // where the game takes their looks and textures for remastered levels
+    let mut parts = vec![
+        "3D Entities/Balls.nmo".to_owned(),
+        "3D Entities/AnimTrafo.nmo".to_owned(),
+    ];
+    if let Some(ph) = data.file("3D Entities/PH") {
+        let mut names: Vec<String> = std::fs::read_dir(&ph)
+            .map_err(|e| format!("{}: {e}", ph.display()))?
+            .flatten()
+            .filter_map(|e| e.file_name().to_str().map(str::to_owned))
+            .filter(|n| n.to_ascii_lowercase().ends_with(".nmo"))
+            .take(1024)
+            .collect();
+        names.sort();
+        parts.extend(names.into_iter().map(|n| format!("3D Entities/PH/{n}")));
+    }
+    let (mut made, mut grown) = (0, 0);
+    for rel in parts {
+        let Some(loaded) = data
+            .file(&rel)
+            .and_then(|p| gamedata::assets::load_nmo(&p).ok())
+        else {
+            continue;
+        };
+        let dir = gamedata::assets::remade_dir(&rel);
+        if let Err(e) = real_dirs(&root, &dir.join("textures")) {
+            out.push(format!("{rel}: not remade: {e}"));
+            continue;
+        }
+        match shapes(&dir, Some(loaded.level), data) {
+            Ok(_) => made += 1,
+            Err(e) => {
+                out.push(format!("{rel}: not remade: {e}"));
+                continue;
+            }
+        }
+        if factor >= 2 {
+            match level(&dir, factor, esrgan.as_deref(), &mut out) {
+                Ok(n) => grown += n,
+                Err(e) => out.push(format!("{rel}: textures left as they were: {e}")),
+            }
+        }
+    }
+    out.push(format!(
+        "{}: {made} shared parts remade, {grown} of their textures x{factor}",
+        root.join(".shared").display()
+    ));
     Ok(out)
 }
 
-/// Gives a level's meshes their rounder looks, made again from the meshes themselves (so a better toolbox replaces
-/// what an older one made), and writes the level file beside and moves it into place. Returns how many meshes got one.
-fn shapes(dir: &Path) -> Result<usize, String> {
-    let mut level = level::open::import(dir)?;
-    // writing the level again names its textures as an export does: a level made otherwise is left alone
-    for (i, t) in level.textures.iter().enumerate() {
-        let ours = dir
-            .join(level::open::texture_file(i, &t.name))
-            .to_string_lossy()
-            .into_owned();
-        if !matches!(&t.source, level::TextureSource::File(p) if *p == ours) {
-            return Err("its textures are not named as the game exports them".into());
+/// Makes the folders from `root` down to `dir` one at a time, each a real folder (a link on the way is refused).
+fn real_dirs(root: &Path, dir: &Path) -> Result<(), String> {
+    let rest = dir
+        .strip_prefix(root)
+        .map_err(|_| "outside the remastered folder".to_owned())?;
+    let mut at = root.to_path_buf();
+    for part in rest.components() {
+        at.push(part);
+        match std::fs::symlink_metadata(&at) {
+            Ok(m) if m.is_dir() => {}
+            Ok(_) => return Err(format!("{}: not a folder", at.display())),
+            Err(_) => std::fs::create_dir(&at).map_err(|e| format!("{}: {e}", at.display()))?,
         }
     }
+    Ok(())
+}
+
+/// Gives a level's meshes their rounder looks, made again from the meshes themselves (so a better toolbox replaces
+/// what an older one made), and writes the level file beside and moves it into place; `fresh` is the level made anew
+/// from the player's copy, else the folder's own is read. A texture the level names that the folder lacks is written
+/// from the copy. Returns how many meshes got a look.
+fn shapes(dir: &Path, fresh: Option<level::Level>, data: &Data) -> Result<usize, String> {
+    let mut level = match fresh {
+        Some(l) => l,
+        None => {
+            let l = level::open::import(dir)?;
+            // read back, its textures are files in the folder; written again they are named as an export names them
+            for (i, t) in l.textures.iter().enumerate() {
+                let ours = dir
+                    .join(level::open::texture_file(i, &t.name))
+                    .to_string_lossy()
+                    .into_owned();
+                if !matches!(&t.source, level::TextureSource::File(p) if *p == ours) {
+                    return Err("its textures are not named as the game exports them".into());
+                }
+            }
+            l
+        }
+    };
     let n = crate::smooth::looks(&mut level);
     // a fresh folder of our own to write into (one left from before is removed, links in it never followed)
     let tmp = dir.join(".remaster-level");
@@ -108,6 +195,26 @@ fn shapes(dir: &Path) -> Result<usize, String> {
             .map_err(|e| format!("{}: {e}", dir.join(name).display()))?;
     }
     let _ = std::fs::remove_dir(&tmp);
+    let textures = dir.join("textures");
+    for (i, t) in level.textures.iter().enumerate() {
+        let path = dir.join(level::open::texture_file(i, &t.name));
+        if std::fs::symlink_metadata(&path).is_ok() || !real_dir(&textures) {
+            continue;
+        }
+        if let Some((w, h, rgba)) = data.texture(t) {
+            replace(&path, |tmp| {
+                image::save_buffer_with_format(
+                    tmp,
+                    &rgba,
+                    w,
+                    h,
+                    image::ExtendedColorType::Rgba8,
+                    image::ImageFormat::Png,
+                )
+                .map_err(|e| e.to_string())
+            })?;
+        }
+    }
     Ok(n)
 }
 
@@ -238,7 +345,10 @@ fn level(
                 Some(k) => keyed(source, k),
                 None => source,
             };
-            let big = match esrgan {
+            // a tiny texture (a blurred reflection map, a gradient) has nothing for Real-ESRGAN to go on: it invents
+            // detail there (cracks in a chrome reflection), so it is resampled
+            let tiny = source.width().min(source.height()) < ESRGAN_MIN_SIDE;
+            let big = match esrgan.filter(|_| !tiny) {
                 Some(prog) => esrgan_upscale(prog, &source, factor, &tmp)
                     .unwrap_or_else(|_| lanczos(&source, factor)),
                 None => lanczos(&source, factor),
@@ -469,7 +579,8 @@ mod tests {
         std::fs::create_dir(&tmp).unwrap();
         std::os::unix::fs::symlink(&outside, tmp.join("level.gltf")).unwrap();
         std::os::unix::fs::symlink(&outside, tmp.join("level.bin")).unwrap();
-        assert_eq!(shapes(&dir).unwrap(), 0);
+        let data = Data { root: root.clone() };
+        assert_eq!(shapes(&dir, None, &data).unwrap(), 0);
         assert_eq!(std::fs::read(&outside).unwrap(), b"keep");
         assert!(
             std::fs::symlink_metadata(dir.join("level.gltf"))

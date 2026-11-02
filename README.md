@@ -13,9 +13,11 @@ drahtseilakt-toolbox remaster [--scale N] [--data DIR]
 `remaster` converts the original levels the copy has into the game's `levels/remastered/` (the open format), gives
 each level rounder shapes (written into the level beside the original meshes, which the physics keeps using, so runs
 are the same) and makes its textures N times larger (default 4; 1 leaves them). With Real-ESRGAN the textures gain
-detail, else they are resampled with Lanczos. Real-ESRGAN is looked for in `realesrgan/` beside the toolbox's
+detail, else they are resampled with Lanczos (as are textures under 64 pixels, where it would invent detail). Real-ESRGAN is looked for in `realesrgan/` beside the toolbox's
 program, then on the PATH; the version used is pinned in [third-party.txt](third-party.txt). The originals are kept
-in `textures.original/`. Run it again after a newer toolbox to bring the levels up to date.
+in `textures.original/`. The parts all levels share (the balls, the modules, the transformer) are remade the same
+way into the hidden `levels/remastered/.shared/`, and the game draws them so in remastered levels. Original levels
+are made again from the copy on each run. Run it again after a newer toolbox to bring the levels up to date.
 
 The toolbox never goes online and never touches the player's original copy.
 

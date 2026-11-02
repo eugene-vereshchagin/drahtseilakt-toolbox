@@ -13,9 +13,12 @@ drahtseilakt-toolbox remaster [--scale N] [--data DIR]
 `remaster` wandelt die Original-Level der Kopie nach `levels/remastered/` des Spiels (offenes Format), gibt jedem
 Level rundere Formen (ins Level neben die ursprünglichen Meshes geschrieben, die die Physik weiter benutzt, sodass
 Läufe gleich bleiben) und vergrößert die Texturen N-fach (Standard 4; 1 lässt sie). Mit Real-ESRGAN gewinnen die
-Texturen Details, sonst werden sie mit Lanczos skaliert. Real-ESRGAN wird in `realesrgan/` neben dem Programm der
+Texturen Details, sonst werden sie mit Lanczos skaliert (wie Texturen unter 64 Pixeln, denen es Details erfinden
+würde). Real-ESRGAN wird in `realesrgan/` neben dem Programm der
 Toolbox gesucht, dann im PATH; die benutzte Version ist in [third-party.txt](third-party.txt) festgelegt. Die
-Originale bleiben in `textures.original/`. Nach einer neueren Toolbox erneut ausführen, um die Level zu erneuern.
+Originale bleiben in `textures.original/`. Die Teile, die alle Level teilen (Kugeln, Module, Transformator), werden
+ebenso in den versteckten Ordner `levels/remastered/.shared/` umgearbeitet, und das Spiel zeichnet sie in
+Remaster-Leveln so. Original-Level werden bei jedem Lauf neu aus der Kopie gebaut. Nach einer neueren Toolbox erneut ausführen, um die Level zu erneuern.
 
 Die Toolbox geht nie online und fasst die Originalkopie des Spielers nie an.
 
