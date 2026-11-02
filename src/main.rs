@@ -27,6 +27,8 @@ options:
                       Real-ESRGAN (in realesrgan/ beside the toolbox, as its download carries it, or
                       realesrgan-ncnn-vulkan on the PATH) they gain detail, else they are resampled with Lanczos
                       and sharpened a little. The originals are kept in textures.original/.
+  --model NAME        the Real-ESRGAN model (default realesrgan-x4plus, which comes with it): any model whose
+                      NAME.param and NAME.bin are in its models/ folder
   --data DIR          the Ballance folder (default: $OPENBALLANCE_DATA, then the copy the game imported)
   -h, --help          this text
 ";
@@ -34,6 +36,7 @@ options:
 struct Options {
     command: Option<String>,
     scale: u32,
+    model: String,
     data: Option<PathBuf>,
 }
 
@@ -41,6 +44,7 @@ fn options(args: impl Iterator<Item = String>) -> Result<Options, String> {
     let mut o = Options {
         command: None,
         scale: 4,
+        model: "realesrgan-x4plus".into(),
         data: None,
     };
     let mut args = args;
@@ -54,6 +58,7 @@ fn options(args: impl Iterator<Item = String>) -> Result<Options, String> {
                 o.scale = n.clamp(1, 32);
             }
             "--data" => o.data = Some(value()?.into()),
+            "--model" => o.model = value()?,
             "-h" | "--help" => o.command = Some("help".into()),
             c if !c.starts_with('-') && o.command.is_none() => o.command = Some(c.to_owned()),
             other => return Err(format!("unknown option {other}\n\n{USAGE}")),
@@ -68,7 +73,7 @@ fn main() -> ExitCode {
         match o.command.as_deref() {
             Some("remaster") => {
                 let data = gamedata::assets::Data::locate(o.data)?;
-                for line in remaster::run(&data, o.scale)? {
+                for line in remaster::run(&data, o.scale, &o.model)? {
                     println!("{line}");
                 }
                 Ok(())

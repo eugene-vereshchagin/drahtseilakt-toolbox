@@ -11,3 +11,14 @@ version   v0.2.5.0 (20220424)
 url       https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/realesrgan-ncnn-vulkan-20220424-ubuntu.zip
 sha256    e5aa6eb131234b87c0c51f82b89390f5e3e642b7b70f2b9bbe95b6a285a40c96
 unpack    third_party/realesrgan/ (the demo pictures and video left out), program made executable
+
+# Community models tried on the owner's machine (2026-11-02), downloaded into third_party/models-test/ from the
+# Upscayl collection (github.com/upscayl/custom-models, models/), sizes checked against the repository's. Their
+# licences are not checked: they are for local use only and never go into a download. The owner's choice for his
+# own remaster is 4x_NMKD-Siax_200k (the most faithful detail in the comparison), installed into the models/ folder
+# of third_party/realesrgan and chosen with --model.
+model     4x_NMKD-Siax_200k              sha256 b2abdffa30fb15be752ac681e0c0edf8b543745c33a989aadc9d7d3394dd3110
+model     4xNomos8kSC                    sha256 da16e3880d87b177b7c6b659bbd880f8a101b868eb9ebc08d69eaa6d3edc4517
+model     4xLSDIR                        sha256 0622f182f0a940b395e4fc70e2707b285e016fa4b014e855205eb40efddfb853
+model     4x_NMKD-Superscale-SP_178000_G sha256 6ea113a9c9066b296ba147fa0939f704462bac000b42e6a79e8fb3b7526d67a4
+url       https://raw.githubusercontent.com/upscayl/custom-models/main/models/<name>.param and .bin

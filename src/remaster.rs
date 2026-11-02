@@ -24,7 +24,7 @@ const IMAGE_MAX: u64 = 64 * 1024 * 1024;
 /// Converts every original level the copy has that is not in levels/remastered yet, gives every level there its
 /// rounder shapes, and upscales its textures by `factor` (1: left as they are). Returns a line a level, and one for
 /// each texture left as it was.
-pub fn run(data: &Data, factor: u32) -> Result<Vec<String>, String> {
+pub fn run(data: &Data, factor: u32, model: &str) -> Result<Vec<String>, String> {
     let root = gamedata::profile::dir(gamedata::profile::Kind::Remastered);
     let mut out = Vec::new();
     for n in 1..=data.level_count().unwrap_or(13) {
@@ -45,6 +45,10 @@ pub fn run(data: &Data, factor: u32) -> Result<Vec<String>, String> {
         .collect();
     levels.sort();
     let esrgan = esrgan();
+    if let Some(prog) = &esrgan {
+        has_model(prog, model)?;
+    }
+    let esrgan = esrgan.as_deref().map(|p| (p, model));
     for dir in levels {
         // an original level is made again from the player's copy each time (what the game reads of it may have
         // grown since: a remastered level is only ever derived from it); any other level from its own file
@@ -65,7 +69,7 @@ pub fn run(data: &Data, factor: u32) -> Result<Vec<String>, String> {
         if factor < 2 {
             continue;
         }
-        match level(&dir, factor, esrgan.as_deref(), &mut out) {
+        match level(&dir, factor, esrgan, &mut out) {
             Ok(n) => out.push(format!(
                 "{}: {n} textures x{factor} ({})",
                 dir.display(),
@@ -116,7 +120,7 @@ pub fn run(data: &Data, factor: u32) -> Result<Vec<String>, String> {
             }
         }
         if factor >= 2 {
-            match level(&dir, factor, esrgan.as_deref(), &mut out) {
+            match level(&dir, factor, esrgan, &mut out) {
                 Ok(n) => grown += n,
                 Err(e) => out.push(format!("{rel}: textures left as they were: {e}")),
             }
@@ -285,12 +289,27 @@ fn esrgan() -> Option<PathBuf> {
     beside.into_iter().chain(on_path).find(|f| f.is_file())
 }
 
+/// The model is one of Real-ESRGAN's: a plain name with its `.param` and `.bin` in `models/` beside the program.
+fn has_model(prog: &Path, model: &str) -> Result<(), String> {
+    let plain = !model.is_empty()
+        && model.len() <= 64
+        && model.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
+        && !model.starts_with('.');
+    let models = prog.parent().map(|d| d.join("models"));
+    let there = models.is_some_and(|m| ["param", "bin"].iter().all(|e| real_file(&m.join(format!("{model}.{e}")))));
+    if plain && there {
+        Ok(())
+    } else {
+        Err(format!("Real-ESRGAN has no model {model:?} in its models/ folder"))
+    }
+}
+
 /// Upscales one level's textures; returns how many. A texture that cannot be read or written is reported in `notes`
 /// and left as it is.
 fn level(
     dir: &Path,
     factor: u32,
-    esrgan: Option<&Path>,
+    esrgan: Option<(&Path, &str)>,
     notes: &mut Vec<String>,
 ) -> Result<usize, String> {
     let gltf = dir.join("level.gltf");
@@ -349,7 +368,7 @@ fn level(
             // detail there (cracks in a chrome reflection), so it is resampled
             let tiny = source.width().min(source.height()) < ESRGAN_MIN_SIDE;
             let big = match esrgan.filter(|_| !tiny) {
-                Some(prog) => esrgan_upscale(prog, &source, factor, &tmp)
+                Some((prog, model)) => esrgan_upscale(prog, model, &source, factor, &tmp)
                     .unwrap_or_else(|_| lanczos(&source, factor)),
                 None => lanczos(&source, factor),
             };
@@ -463,14 +482,68 @@ fn target(w: u32, h: u32, factor: u32) -> (u32, u32) {
 /// Lanczos resampling and a light unsharp mask.
 fn lanczos(img: &RgbaImage, factor: u32) -> RgbaImage {
     let (w, h) = target(img.width(), img.height(), factor);
-    let big = imageops::resize(img, w, h, imageops::FilterType::Lanczos3);
-    imageops::unsharpen(&big, 0.6 * (w as f32 / img.width().max(1) as f32).sqrt(), 2)
+    let f = w / img.width().max(1);
+    let p = margin(img);
+    let big = imageops::resize(&padded(img, p), w + 2 * p * f, h + 2 * p * f, imageops::FilterType::Lanczos3);
+    let big = imageops::crop_imm(&big, p * f, p * f, w, h).to_image();
+    imageops::unsharpen(&big, 0.6 * (f as f32).sqrt(), 2)
+}
+
+/// The margin a texture gets around it while it grows: an eighth of its shorter side, at least 4 texels.
+fn margin(img: &RgbaImage) -> u32 {
+    (img.width().min(img.height()) / 8).max(4).min(img.width().min(img.height()))
+}
+
+/// The texture repeats as a tile: across its edges it changes no more than twice as much as within (a decal or a
+/// picture does not, its edges do not meet).
+fn tiles(img: &RgbaImage) -> bool {
+    let (w, h) = img.dimensions();
+    if w < 2 || h < 2 {
+        return false;
+    }
+    let d = |a: &image::Rgba<u8>, b: &image::Rgba<u8>| -> u64 {
+        a.0.iter().zip(b.0).map(|(x, y)| u64::from(x.abs_diff(y))).sum()
+    };
+    let (mut across, mut within) = (0u64, 0u64);
+    for y in 0..h {
+        across += d(img.get_pixel(0, y), img.get_pixel(w - 1, y));
+        within += d(img.get_pixel(0, y), img.get_pixel(1, y));
+    }
+    for x in 0..w {
+        across += d(img.get_pixel(x, 0), img.get_pixel(x, h - 1));
+        within += d(img.get_pixel(x, 0), img.get_pixel(x, 1));
+    }
+    across <= 2 * within.max(1)
+}
+
+/// The texture with a margin of `p` texels around it, so that what grows at its edges sees what is beyond them: the
+/// texture's other side where it repeats as a tile (no seam where tiles meet), else its own edge mirrored.
+fn padded(img: &RgbaImage, p: u32) -> RgbaImage {
+    let (w, h) = img.dimensions();
+    let wrap = tiles(img);
+    let at = |i: i64, n: u32| -> u32 {
+        let n = i64::from(n);
+        let j = if wrap {
+            i.rem_euclid(n)
+        } else {
+            // mirrored: -1 -> 0, n -> n - 1
+            let m = i.rem_euclid(2 * n);
+            if m < n { m } else { 2 * n - 1 - m }
+        };
+        j as u32
+    };
+    let mut out = RgbaImage::new(w + 2 * p, h + 2 * p);
+    for (x, y, px) in out.enumerate_pixels_mut() {
+        *px = *img.get_pixel(at(i64::from(x) - i64::from(p), w), at(i64::from(y) - i64::from(p), h));
+    }
+    out
 }
 
 /// Real-ESRGAN by 4 at a time (its model's scale), then Lanczos to the exact size; its files in `tmp`, a folder of
 /// the level's own.
 fn esrgan_upscale(
     prog: &Path,
+    model: &str,
     img: &RgbaImage,
     factor: u32,
     tmp: &Path,
@@ -486,8 +559,11 @@ fn esrgan_upscale(
     let (input, output) = (tmp.join("in.png"), tmp.join("out.png"));
     let mut cur = img.clone();
     while (cur.width() < w || cur.height() < h) && cur.width().max(cur.height()) * 4 <= SIDE_MAX {
+        // each pass grows the texture with a margin around it (no seams where tiles meet), then cuts it off
+        let p = margin(&cur);
         replace(&input, |t| {
-            cur.save_with_format(t, image::ImageFormat::Png)
+            padded(&cur, p)
+                .save_with_format(t, image::ImageFormat::Png)
                 .map_err(|e| e.to_string())
         })?;
         if !writable(&output) {
@@ -498,7 +574,7 @@ fn esrgan_upscale(
             .arg(&input)
             .arg("-o")
             .arg(&output)
-            .args(["-s", "4", "-n", "realesrgan-x4plus"])
+            .args(["-s", "4", "-n", model])
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .status()
@@ -506,7 +582,12 @@ fn esrgan_upscale(
         if !ok {
             return Err("Real-ESRGAN failed".into());
         }
-        cur = load(&output)?;
+        let (cw, ch) = cur.dimensions();
+        let grown = load(&output)?;
+        if grown.dimensions() != ((cw + 2 * p) * 4, (ch + 2 * p) * 4) {
+            return Err("Real-ESRGAN gave a picture of another size".into());
+        }
+        cur = imageops::crop_imm(&grown, p * 4, p * 4, cw * 4, ch * 4).to_image();
     }
     Ok(if cur.dimensions() == (w, h) {
         cur
@@ -589,6 +670,36 @@ mod tests {
         );
         assert!(level::open::import(&dir).is_ok());
         std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_tile_is_padded_with_its_other_side_and_a_picture_with_its_mirror() {
+        // a tile: columns 10, 20, 30, 20 (its right edge leads back into its left one)
+        let mut tile = RgbaImage::new(4, 4);
+        for (x, _, p) in tile.enumerate_pixels_mut() {
+            let v = [10u8, 20, 30, 20][x as usize];
+            *p = image::Rgba([v, v, v, 255]);
+        }
+        assert!(tiles(&tile));
+        let t = padded(&tile, 2);
+        assert_eq!(t.dimensions(), (8, 8));
+        // left of column 0 come columns 3 and 2
+        assert_eq!(t.get_pixel(0, 3).0[0], 30);
+        assert_eq!(t.get_pixel(1, 3).0[0], 20);
+        assert_eq!(t.get_pixel(2, 3).0[0], 10);
+        // a picture whose edges do not meet: 0 at the left, 250 at the right
+        let mut pic = RgbaImage::new(4, 4);
+        for (x, _, p) in pic.enumerate_pixels_mut() {
+            let v = [0u8, 80, 160, 250][x as usize];
+            *p = image::Rgba([v, v, v, 255]);
+        }
+        assert!(!tiles(&pic));
+        let m = padded(&pic, 2);
+        assert_eq!(m.get_pixel(1, 0).0[0], 0, "its own edge mirrored");
+        assert_eq!(m.get_pixel(0, 0).0[0], 80);
+        // Lanczos keeps the tile's edges meeting: its left and right columns stay alike
+        let big = lanczos(&tile, 4);
+        assert_eq!(big.dimensions(), (16, 16));
     }
 
     #[test]

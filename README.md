@@ -7,7 +7,7 @@ on the player's own machine and from the player's own copy of the game. The game
 folders; everything heavy that makes levels look modern lives here, so the game needs none of it.
 
 ```
-drahtseilakt-toolbox remaster [--scale N] [--data DIR]
+drahtseilakt-toolbox remaster [--scale N] [--model NAME] [--data DIR]
 ```
 
 `remaster` converts the original levels the copy has into the game's `levels/remastered/` (the open format), gives
@@ -17,7 +17,9 @@ detail, else they are resampled with Lanczos (as are textures under 64 pixels, w
 program, then on the PATH; the version used is pinned in [third-party.txt](third-party.txt). The originals are kept
 in `textures.original/`. The parts all levels share (the balls, the modules, the transformer) are remade the same
 way into the hidden `levels/remastered/.shared/`, and the game draws them so in remastered levels. Original levels
-are made again from the copy on each run. Run it again after a newer toolbox to bring the levels up to date.
+are made again from the copy on each run. A texture that repeats as a tile grows with its other side around it, so no seams show where tiles meet.
+`--model` picks another Real-ESRGAN model put into its `models/` folder (the default, realesrgan-x4plus, comes with
+it). Run it again after a newer toolbox to bring the levels up to date.
 
 The toolbox never goes online and never touches the player's original copy.
 
