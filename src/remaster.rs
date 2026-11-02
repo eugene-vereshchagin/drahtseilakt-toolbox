@@ -18,7 +18,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 #[derive(Clone, Debug, PartialEq)]
 pub enum Progress {
     /// Working on step `done + 1` of `total` (a level or a shared part), named `what`.
-    Step { done: usize, total: usize, what: String },
+    Step {
+        done: usize,
+        total: usize,
+        what: String,
+    },
     /// A texture was made larger: its original and the new one.
     Texture { original: PathBuf, grown: PathBuf },
     /// One line of the result (as the command line prints them at the end).
@@ -38,7 +42,11 @@ impl Watch<'_> {
 }
 
 /// The line a run cancelled ends with.
-pub const CANCELLED: &str = "cancelled: the levels made so far are whole, the rest left as they were";
+pub const CANCELLED: &str =
+    "cancelled: the levels made before are whole, the rest left as they were";
+/// What a level stopped among its textures is left as.
+const PART_GROWN: &str =
+    "stopped among its textures: some grown, the rest as they were (the next run grows them all)";
 
 /// The largest side a texture is made (GPU textures of 8K are common; the originals are 128 to 256).
 const SIDE_MAX: u32 = 8192;
@@ -51,7 +59,12 @@ const IMAGE_MAX: u64 = 64 * 1024 * 1024;
 /// Converts every original level the copy has that is not in levels/remastered yet, gives every level there its
 /// rounder shapes, and upscales its textures by `factor` (1: left as they are). Returns a line a level, and one for
 /// each texture left as it was.
-pub fn run(data: &Data, factor: u32, model: &str, relief_strength: f32) -> Result<Vec<String>, String> {
+pub fn run(
+    data: &Data,
+    factor: u32,
+    model: &str,
+    relief_strength: f32,
+) -> Result<Vec<String>, String> {
     let cancel = AtomicBool::new(false);
     let mut watch = Watch {
         report: &mut |_| {},
@@ -104,8 +117,14 @@ pub fn run_in(
         "3D Entities/AnimTrafo.nmo".to_owned(),
     ];
     if let Some(ph) = data.file("3D Entities/PH") {
-        let mut names: Vec<String> = std::fs::read_dir(&ph)
-            .map_err(|e| format!("{}: {e}", ph.display()))?
+        // a folder that cannot be read leaves the shared parts but Balls and the transformer, and says so
+        let listed = std::fs::read_dir(&ph);
+        if let Err(e) = &listed {
+            line(&mut out, watch, format!("{}: {e}", ph.display()));
+        }
+        let mut names: Vec<String> = listed
+            .into_iter()
+            .flatten()
             .flatten()
             .filter_map(|e| e.file_name().to_str().map(str::to_owned))
             .filter(|n| n.to_ascii_lowercase().ends_with(".nmo"))
@@ -120,8 +139,15 @@ pub fn run_in(
             line(&mut out, watch, CANCELLED.to_owned());
             return Ok(out);
         }
-        let what = dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-        (watch.report)(Progress::Step { done: step, total, what });
+        let what = dir
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        (watch.report)(Progress::Step {
+            done: step,
+            total,
+            what,
+        });
         // an original level is made again from the player's copy each time (what the game reads of it may have
         // grown since: a remastered level is only ever derived from it); any other level from its own file
         let original = dir
@@ -135,26 +161,56 @@ pub fn run_in(
             })
             .and_then(|n| from_copy(data, n));
         match shapes(&dir, original.map(|l| l.level), data) {
-            Ok(n) => line(&mut out, watch, format!("{}: {n} meshes rounder", dir.display())),
-            Err(e) => line(&mut out, watch, format!("{}: shapes left as they were: {e}", dir.display())),
+            Ok(n) => line(
+                &mut out,
+                watch,
+                format!("{}: {n} meshes rounder", dir.display()),
+            ),
+            Err(e) => line(
+                &mut out,
+                watch,
+                format!("{}: shapes left as they were: {e}", dir.display()),
+            ),
         }
         if factor >= 2 {
             match level(&dir, factor, esrgan, &mut out, watch) {
-                Ok(n) => line(&mut out, watch, format!(
-                    "{}: {n} textures x{factor} ({})",
-                    dir.display(),
-                    if esrgan.is_some() {
-                        "Real-ESRGAN"
-                    } else {
-                        "Lanczos"
-                    }
-                )),
-                Err(e) => line(&mut out, watch, format!("{}: not remastered: {e}", dir.display())),
+                Ok(n) => line(
+                    &mut out,
+                    watch,
+                    format!(
+                        "{}: {n} textures x{factor} ({})",
+                        dir.display(),
+                        if esrgan.is_some() {
+                            "Real-ESRGAN"
+                        } else {
+                            "Lanczos"
+                        }
+                    ),
+                ),
+                Err(e) => line(
+                    &mut out,
+                    watch,
+                    format!("{}: not remastered: {e}", dir.display()),
+                ),
             }
         }
+        // stopped among its textures: the level is left part grown (the next run grows it all again), no relief
+        if watch.stopped() {
+            line(&mut out, watch, format!("{}: {PART_GROWN}", dir.display()));
+            line(&mut out, watch, CANCELLED.to_owned());
+            return Ok(out);
+        }
         match relief(&dir, factor, relief_strength) {
-            Ok(n) => line(&mut out, watch, format!("{}: {n} normal maps", dir.display())),
-            Err(e) => line(&mut out, watch, format!("{}: no relief: {e}", dir.display())),
+            Ok(n) => line(
+                &mut out,
+                watch,
+                format!("{}: {n} normal maps", dir.display()),
+            ),
+            Err(e) => line(
+                &mut out,
+                watch,
+                format!("{}: no relief: {e}", dir.display()),
+            ),
         }
     }
     let first = total - parts.len();
@@ -164,7 +220,11 @@ pub fn run_in(
             line(&mut out, watch, CANCELLED.to_owned());
             return Ok(out);
         }
-        (watch.report)(Progress::Step { done: first + step, total, what: rel.clone() });
+        (watch.report)(Progress::Step {
+            done: first + step,
+            total,
+            what: rel.clone(),
+        });
         let Some(loaded) = data
             .file(&rel)
             .and_then(|p| gamedata::assets::load_nmo(&p).ok())
@@ -186,8 +246,17 @@ pub fn run_in(
         if factor >= 2 {
             match level(&dir, factor, esrgan, &mut out, watch) {
                 Ok(n) => grown += n,
-                Err(e) => line(&mut out, watch, format!("{rel}: textures left as they were: {e}")),
+                Err(e) => line(
+                    &mut out,
+                    watch,
+                    format!("{rel}: textures left as they were: {e}"),
+                ),
             }
+        }
+        if watch.stopped() {
+            line(&mut out, watch, format!("{rel}: {PART_GROWN}"));
+            line(&mut out, watch, CANCELLED.to_owned());
+            return Ok(out);
         }
         match relief(&dir, factor, relief_strength) {
             Ok(n) => reliefs += n,
@@ -199,7 +268,11 @@ pub fn run_in(
         root.join(".shared").display()
     );
     line(&mut out, watch, summary);
-    (watch.report)(Progress::Step { done: total, total, what: String::new() });
+    (watch.report)(Progress::Step {
+        done: total,
+        total,
+        what: String::new(),
+    });
     Ok(out)
 }
 
@@ -459,7 +532,12 @@ pub fn models() -> Vec<String> {
         .into_iter()
         .flatten()
         .flatten()
-        .filter_map(|e| e.file_name().to_str()?.strip_suffix(".param").map(str::to_owned))
+        .filter_map(|e| {
+            e.file_name()
+                .to_str()?
+                .strip_suffix(".param")
+                .map(str::to_owned)
+        })
         .filter(|n| has_model(&prog, n).is_ok())
         .take(256)
         .collect();
@@ -597,7 +675,10 @@ fn level(
         match one() {
             Ok(()) => {
                 done += 1;
-                (watch.report)(Progress::Texture { original: original.clone(), grown: path.clone() });
+                (watch.report)(Progress::Texture {
+                    original: original.clone(),
+                    grown: path.clone(),
+                });
             }
             Err(e) => {
                 let l = format!("{}: left as it was: {e}", path.display());
@@ -934,7 +1015,8 @@ mod tests {
 
     /// A remastered folder with one level of one triangle and one 8x8 texture, outside any copy of the game.
     fn one_level(name: &str) -> (PathBuf, Data) {
-        let root = std::env::temp_dir().join(format!("drahtseilakt-run-{name}-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("drahtseilakt-run-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let dir = root.join("Mine");
         let mut l = level::Level::default();
@@ -943,7 +1025,10 @@ mod tests {
             positions: vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
             normals: vec![[0.0, 0.0, 1.0]; 3],
             uvs: vec![[0.0; 2]; 3],
-            parts: vec![level::Part { material: None, indices: vec![0, 1, 2] }],
+            parts: vec![level::Part {
+                material: None,
+                indices: vec![0, 1, 2],
+            }],
             channels: Vec::new(),
             look: None,
         });
@@ -955,7 +1040,14 @@ mod tests {
         level::open::export(&l, &dir).unwrap();
         std::fs::create_dir_all(dir.join("textures")).unwrap();
         let png = dir.join(level::open::texture_file(0, "T"));
-        image::save_buffer(&png, &[200u8; 8 * 8 * 4], 8, 8, image::ExtendedColorType::Rgba8).unwrap();
+        image::save_buffer(
+            &png,
+            &[200u8; 8 * 8 * 4],
+            8,
+            8,
+            image::ExtendedColorType::Rgba8,
+        )
+        .unwrap();
         // an empty copy of the game: no originals, no shared parts
         let copy = root.join("copy");
         std::fs::create_dir_all(&copy).unwrap();
@@ -968,15 +1060,46 @@ mod tests {
         let cancel = AtomicBool::new(false);
         let mut seen = Vec::new();
         let mut report = |p: Progress| seen.push(p);
-        let mut watch = Watch { report: &mut report, cancel: &cancel };
+        let mut watch = Watch {
+            report: &mut report,
+            cancel: &cancel,
+        };
         let out = run_in(&data, &root, 2, "realesrgan-x4plus", 0.0, &mut watch).unwrap();
-        assert!(seen.iter().any(|p| matches!(p, Progress::Step { done: 0, total: 3, what } if what == "Mine")), "{seen:?}");
-        assert!(seen.iter().any(|p| matches!(p, Progress::Texture { .. })), "{seen:?}");
-        assert!(seen.iter().any(|p| matches!(p, Progress::Step { done: 3, total: 3, .. })));
+        assert!(
+            seen.iter()
+                .any(|p| matches!(p, Progress::Step { done: 0, total: 3, what } if what == "Mine")),
+            "{seen:?}"
+        );
+        assert!(
+            seen.iter().any(|p| matches!(p, Progress::Texture { .. })),
+            "{seen:?}"
+        );
+        assert!(seen.iter().any(|p| matches!(
+            p,
+            Progress::Step {
+                done: 3,
+                total: 3,
+                ..
+            }
+        )));
         // every result line was reported as it came, in the same order
-        let lines: Vec<&String> = seen.iter().filter_map(|p| if let Progress::Line(l) = p { Some(l) } else { None }).collect();
+        let lines: Vec<&String> = seen
+            .iter()
+            .filter_map(|p| {
+                if let Progress::Line(l) = p {
+                    Some(l)
+                } else {
+                    None
+                }
+            })
+            .collect();
         assert_eq!(lines, out.iter().collect::<Vec<_>>());
-        assert_eq!(load(&root.join("Mine").join(level::open::texture_file(0, "T"))).unwrap().width(), 16);
+        assert_eq!(
+            load(&root.join("Mine").join(level::open::texture_file(0, "T")))
+                .unwrap()
+                .width(),
+            16
+        );
         std::fs::remove_dir_all(&root).unwrap();
     }
 
@@ -985,11 +1108,19 @@ mod tests {
         let (root, data) = one_level("cancel");
         let cancel = AtomicBool::new(true);
         let mut report = |_| {};
-        let mut watch = Watch { report: &mut report, cancel: &cancel };
+        let mut watch = Watch {
+            report: &mut report,
+            cancel: &cancel,
+        };
         let out = run_in(&data, &root, 2, "realesrgan-x4plus", 0.0, &mut watch).unwrap();
         assert_eq!(out, vec![CANCELLED.to_owned()]);
         // nothing was touched
-        assert_eq!(load(&root.join("Mine").join(level::open::texture_file(0, "T"))).unwrap().width(), 8);
+        assert_eq!(
+            load(&root.join("Mine").join(level::open::texture_file(0, "T")))
+                .unwrap()
+                .width(),
+            8
+        );
         std::fs::remove_dir_all(&root).unwrap();
     }
 
