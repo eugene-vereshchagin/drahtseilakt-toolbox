@@ -19,7 +19,8 @@ Toolbox gesucht, dann im PATH; die benutzte Version ist in [third-party.txt](thi
 Originale bleiben in `textures.original/`. Die Teile, die alle Level teilen (Kugeln, Module, Transformator), werden
 ebenso in den versteckten Ordner `levels/remastered/.shared/` umgearbeitet, und das Spiel zeichnet sie in
 Remaster-Leveln so. Original-Level werden bei jedem Lauf neu aus der Kopie gebaut. Eine Textur, die sich als Kachel wiederholt, wächst mit ihrer Gegenseite ringsum, sodass an den Kachelgrenzen keine
-Nähte entstehen. `--model` wählt ein anderes Real-ESRGAN-Modell aus seinem Ordner `models/` (Standard ist
+Nähte entstehen. Jede beleuchtete Textur bekommt außerdem eine Normal Map aus ihrem eigenen Bild (Nieten, Fugen und Seile fangen das
+Licht), die das Spiel in Remaster-Leveln benutzt. `--model` wählt ein anderes Real-ESRGAN-Modell aus seinem Ordner `models/` (Standard ist
 realesrgan-x4plus, das mitkommt). Nach einer neueren Toolbox erneut ausführen, um die Level zu erneuern.
 
 Die Toolbox geht nie online und fasst die Originalkopie des Spielers nie an.

@@ -18,7 +18,8 @@ program, then on the PATH; the version used is pinned in [third-party.txt](third
 in `textures.original/`. The parts all levels share (the balls, the modules, the transformer) are remade the same
 way into the hidden `levels/remastered/.shared/`, and the game draws them so in remastered levels. Original levels
 are made again from the copy on each run. A texture that repeats as a tile grows with its other side around it, so no seams show where tiles meet.
-`--model` picks another Real-ESRGAN model put into its `models/` folder (the default, realesrgan-x4plus, comes with
+Each lit texture also gets a normal map made from its own picture (rivets, plank gaps and ropes catch the light),
+which the game uses for remastered levels. `--model` picks another Real-ESRGAN model put into its `models/` folder (the default, realesrgan-x4plus, comes with
 it). Run it again after a newer toolbox to bring the levels up to date.
 
 The toolbox never goes online and never touches the player's original copy.

@@ -8,6 +8,7 @@
 // and image code reads better with plain arithmetic and indexing of fixed-size arrays.
 #![allow(clippy::arithmetic_side_effects, clippy::indexing_slicing)]
 
+mod normals;
 mod remaster;
 mod smooth;
 
