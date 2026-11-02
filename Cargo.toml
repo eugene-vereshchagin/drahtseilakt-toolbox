@@ -1,0 +1,33 @@
+# drahtseilakt-toolbox: prepares levels for Drahtseilakt on the player's machine. It shares the level reading with
+# the game: the game's crates come from a checkout of the game's repository beside this one (../ballance/drahtseilakt),
+# so a build needs no network. Dependencies are pinned in Cargo.lock.
+
+[package]
+name = "drahtseilakt-toolbox"
+version = "0.1.0"
+description = "Prepares levels for the game Drahtseilakt on the player's machine: remastered levels with rounder shapes and larger textures"
+edition = "2024"
+rust-version = "1.89"
+license = "GPL-3.0-only"
+repository = "https://github.com/eugene-vereshchagin/drahtseilakt-toolbox"
+
+[[bin]]
+name = "drahtseilakt-toolbox"
+path = "src/main.rs"
+
+[dependencies]
+gamedata = { path = "../ballance/drahtseilakt/crates/gamedata" }
+level = { path = "../ballance/drahtseilakt/crates/level" }
+glam = "=0.34.1"
+image = { version = "=0.25.10", default-features = false, features = ["bmp", "tga", "png", "jpeg"] }
+serde_json = "=1.0.154"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+indexing_slicing = "deny"
+arithmetic_side_effects = "deny"

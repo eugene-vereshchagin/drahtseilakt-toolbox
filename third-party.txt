@@ -1,0 +1,13 @@
+# Third-party programs the toolbox uses, pinned. They are downloaded into third_party/ (never committed) and checked
+# against the hash here; a toolbox download carries them in realesrgan/ beside its program. The game never uses them.
+#
+# Real-ESRGAN ncnn Vulkan, Linux x86-64 build (program and models). Licences: Real-ESRGAN BSD-3-Clause (models),
+# Real-ESRGAN-ncnn-vulkan MIT, ncnn BSD-3-Clause; the archive has no licence files, so a download that carries it
+# must add their texts. Windows and macOS builds of the same release are to be pinned the same way.
+# The authors publish no hash: this one was taken at the first download (2026-11-02) and the size checked against
+# the release's (46931474 bytes).
+name      realesrgan-ncnn-vulkan
+version   v0.2.5.0 (20220424)
+url       https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/realesrgan-ncnn-vulkan-20220424-ubuntu.zip
+sha256    e5aa6eb131234b87c0c51f82b89390f5e3e642b7b70f2b9bbe95b6a285a40c96
+unpack    third_party/realesrgan/ (the demo pictures and video left out), program made executable

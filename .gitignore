@@ -1,0 +1,5 @@
+# Cargo build output
+/target/
+
+# Third-party programs downloaded for the toolbox (pinned in third-party.txt), never committed
+/third_party/
