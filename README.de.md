@@ -7,7 +7,7 @@ auf dem Rechner des Spielers und aus seiner eigenen Kopie des Spiels vor. Das Sp
 Level-Ordnern liegt; alles Schwere, was Level modern aussehen lässt, lebt hier, und das Spiel braucht nichts davon.
 
 ```
-drahtseilakt-toolbox remaster [--scale N] [--model NAME] [--data DIR]
+drahtseilakt-toolbox remaster [--scale N] [--model NAME] [--relief S] [--data DIR]
 ```
 
 `remaster` wandelt die Original-Level der Kopie nach `levels/remastered/` des Spiels (offenes Format), gibt jedem
@@ -19,8 +19,9 @@ Toolbox gesucht, dann im PATH; die benutzte Version ist in [third-party.txt](thi
 Originale bleiben in `textures.original/`. Die Teile, die alle Level teilen (Kugeln, Module, Transformator), werden
 ebenso in den versteckten Ordner `levels/remastered/.shared/` umgearbeitet, und das Spiel zeichnet sie in
 Remaster-Leveln so. Original-Level werden bei jedem Lauf neu aus der Kopie gebaut. Eine Textur, die sich als Kachel wiederholt, wächst mit ihrer Gegenseite ringsum, sodass an den Kachelgrenzen keine
-Nähte entstehen. Jede beleuchtete Textur bekommt außerdem eine Normal Map aus ihrem eigenen Bild (Nieten, Fugen und Seile fangen das
-Licht), die das Spiel in Remaster-Leveln benutzt. `--model` wählt ein anderes Real-ESRGAN-Modell aus seinem Ordner `models/` (Standard ist
+Nähte entstehen. Mit `--relief S` bekommt jede beleuchtete Textur außerdem eine Normal Map der Stärke S
+aus ihrem eigenen Bild, die das Spiel in Remaster-Leveln benutzt. Standardmäßig aus: aus dem Bild geraten, vertieft das
+Relief jeden Riss und jede Fuge (bei 8 sah die Welt wie von Säure zerfressen aus); niedrig halten, 1 bis 3. `--model` wählt ein anderes Real-ESRGAN-Modell aus seinem Ordner `models/` (Standard ist
 realesrgan-x4plus, das mitkommt). Nach einer neueren Toolbox erneut ausführen, um die Level zu erneuern.
 
 Die Toolbox geht nie online und fasst die Originalkopie des Spielers nie an.

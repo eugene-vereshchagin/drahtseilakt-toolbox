@@ -24,7 +24,7 @@ const IMAGE_MAX: u64 = 64 * 1024 * 1024;
 /// Converts every original level the copy has that is not in levels/remastered yet, gives every level there its
 /// rounder shapes, and upscales its textures by `factor` (1: left as they are). Returns a line a level, and one for
 /// each texture left as it was.
-pub fn run(data: &Data, factor: u32, model: &str) -> Result<Vec<String>, String> {
+pub fn run(data: &Data, factor: u32, model: &str, relief_strength: f32) -> Result<Vec<String>, String> {
     let root = gamedata::profile::dir(gamedata::profile::Kind::Remastered);
     let mut out = Vec::new();
     for n in 1..=data.level_count().unwrap_or(13) {
@@ -80,7 +80,7 @@ pub fn run(data: &Data, factor: u32, model: &str) -> Result<Vec<String>, String>
                 Err(e) => out.push(format!("{}: not remastered: {e}", dir.display())),
             }
         }
-        match relief(&dir, factor) {
+        match relief(&dir, factor, relief_strength) {
             Ok(n) => out.push(format!("{}: {n} normal maps", dir.display())),
             Err(e) => out.push(format!("{}: no relief: {e}", dir.display())),
         }
@@ -128,7 +128,7 @@ pub fn run(data: &Data, factor: u32, model: &str) -> Result<Vec<String>, String>
                 Err(e) => out.push(format!("{rel}: textures left as they were: {e}")),
             }
         }
-        match relief(&dir, factor) {
+        match relief(&dir, factor, relief_strength) {
             Ok(n) => reliefs += n,
             Err(e) => out.push(format!("{rel}: no relief: {e}")),
         }
@@ -238,7 +238,11 @@ fn write_level(dir: &Path, level: &level::Level) -> Result<(), String> {
 /// Gives the level's lit, opaque or alpha-tested materials a normal map made from their texture as it is now (after
 /// the upscale), written into textures/ beside the others and named in the level file. A level that has normal maps
 /// already (one not made from the copy anew) is left as it is. Returns how many maps were made.
-fn relief(dir: &Path, scale: u32) -> Result<usize, String> {
+fn relief(dir: &Path, scale: u32, strength: f32) -> Result<usize, String> {
+    // none asked for: the level is left with its textures alone (it was just rebuilt without normal maps)
+    if strength <= 0.0 {
+        return Ok(0);
+    }
     let mut level = level::open::import(dir)?;
     if level.materials.iter().any(|m| m.normal.is_some()) {
         return Ok(0);
@@ -277,7 +281,7 @@ fn relief(dir: &Path, scale: u32) -> Result<usize, String> {
                     continue;
                 }
                 let grown = (img.width() / ow.max(1)).max(1).min(scale.max(1));
-                let map = crate::normals::normal_map(&img, grown, crate::normals::STRENGTH);
+                let map = crate::normals::normal_map(&img, grown, strength);
                 let name = format!("{}_normal", base.name);
                 let n = level.textures.len();
                 let path = dir.join(level::open::texture_file(n, &name));

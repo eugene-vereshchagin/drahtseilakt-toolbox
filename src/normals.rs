@@ -8,8 +8,10 @@
 
 use image::RgbaImage;
 
-/// How strongly the relief tilts the normal; tuned on the original's wood panels with metal strips, rivets and ropes.
-pub const STRENGTH: f32 = 8.0;
+/// The strength the tests use (the toolbox's is chosen with --relief; the owner found 8 far too strong: the relief
+/// is guessed from the picture, so every crack and gap became a groove).
+#[cfg(test)]
+const STRENGTH: f32 = 8.0;
 
 /// The normal map of `img`, a texture grown `scale` times from the original's (its detail is that coarse).
 pub fn normal_map(img: &RgbaImage, scale: u32, strength: f32) -> RgbaImage {

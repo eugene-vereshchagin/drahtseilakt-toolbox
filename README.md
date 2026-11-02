@@ -7,7 +7,7 @@ on the player's own machine and from the player's own copy of the game. The game
 folders; everything heavy that makes levels look modern lives here, so the game needs none of it.
 
 ```
-drahtseilakt-toolbox remaster [--scale N] [--model NAME] [--data DIR]
+drahtseilakt-toolbox remaster [--scale N] [--model NAME] [--relief S] [--data DIR]
 ```
 
 `remaster` converts the original levels the copy has into the game's `levels/remastered/` (the open format), gives
@@ -18,8 +18,9 @@ program, then on the PATH; the version used is pinned in [third-party.txt](third
 in `textures.original/`. The parts all levels share (the balls, the modules, the transformer) are remade the same
 way into the hidden `levels/remastered/.shared/`, and the game draws them so in remastered levels. Original levels
 are made again from the copy on each run. A texture that repeats as a tile grows with its other side around it, so no seams show where tiles meet.
-Each lit texture also gets a normal map made from its own picture (rivets, plank gaps and ropes catch the light),
-which the game uses for remastered levels. `--model` picks another Real-ESRGAN model put into its `models/` folder (the default, realesrgan-x4plus, comes with
+With `--relief S` each lit texture also gets a normal map of strength S made from its own picture, which the game
+uses for remastered levels. It is off by default: guessed from the picture, the relief deepens every crack and gap
+(at 8 the world looked etched by acid); keep it low, 1 to 3. `--model` picks another Real-ESRGAN model put into its `models/` folder (the default, realesrgan-x4plus, comes with
 it). Run it again after a newer toolbox to bring the levels up to date.
 
 The toolbox never goes online and never touches the player's original copy.
