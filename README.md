@@ -10,6 +10,7 @@ folders; everything heavy that makes levels look modern lives here, so the game 
 drahtseilakt-toolbox                     (the window)
 drahtseilakt-toolbox remaster [--scale N] [--model NAME] [--relief S] [--data DIR]
 drahtseilakt-toolbox relief DIR [--scale N] [--relief S]
+drahtseilakt-toolbox import-maps DIR [--to DIR]
 ```
 
 Started without a command it opens its window (Linux X11 or Wayland, Windows, macOS; it remembers the model and
@@ -36,6 +37,17 @@ bricks stand out at a glancing view too; wood, stone and metal are left alone. `
 level folder of the open format again, without remastering it. `--model` picks another Real-ESRGAN model put into its `models/` folder (the default, realesrgan-x4plus, comes with
 it). `remaster` (or `sounds` alone) also makes the "original" sound theme in the game's data folder from the copy's
 sounds and music; it is the original's, so it stays on the player's machine. Run it again after a newer toolbox to bring the levels up to date.
+
+`import-maps DIR` sorts a downloaded collection of community maps (an unpacked archive: folders of any depth,
+pictures, documents) into the game's `levels/community/` (or `--to DIR`), in the shape the game lists (the game's
+levels.md, "A level is a folder"): one folder per map with its `.nmo`, its picture beside it as `preview.jpg`/`.png`,
+and a `level.txt` saying where it came from (and its whole title when the folder's name had to lose characters). A
+generic file name (`Level_07.NMO` in "45-Degree Rotated Maps") is named after its collection ("45-Degree Rotated -
+Level 07"); the same file found twice becomes one level; packed archives (`.tar.gz`, `.zip`...) are named, not opened;
+names are made safe for Linux, Windows and macOS (no reserved names, no trailing dots or spaces, at most 40
+characters cut at a word with "…", a second "Hello Mars" becomes "Hello Mars (2)"). Links are never followed, depth
+and counts are capped, the source is only read, and each level is written into a hidden folder and renamed into
+place. A second run adds only what is new. The window has the same as a field and an Import button.
 
 The toolbox never goes online and never touches the player's original copy.
 
