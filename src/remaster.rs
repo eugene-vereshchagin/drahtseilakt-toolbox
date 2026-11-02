@@ -71,7 +71,61 @@ pub fn run(
         cancel: &cancel,
     };
     let root = gamedata::profile::dir(gamedata::profile::Kind::Remastered);
-    run_in(data, &root, factor, model, relief_strength, &mut watch)
+    let mut out = run_in(data, &root, factor, model, relief_strength, &mut watch)?;
+    out.push(original_sounds(data, &gamedata::profile::data_dir().join("sounds"))?);
+    Ok(out)
+}
+
+/// The largest sound file of the copy taken into the "original" theme.
+const SOUND_MAX: u64 = 64 * 1024 * 1024;
+
+/// Makes the "original" sound theme in `sounds` (the data folder's sounds/, which the game scans): the copy's own
+/// Sounds/*.wav, music among them, with a theme.txt. It stays on the player's machine (it is the original's): the
+/// game never ships it. Folders are made one by one, never through a link; files written beside and moved in.
+pub fn original_sounds(data: &Data, sounds: &Path) -> Result<String, String> {
+    let Some(from) = data.file("Sounds").filter(|p| real_dir(p)) else {
+        return Ok("sounds: the copy has no Sounds folder; no original theme made".into());
+    };
+    for dir in [sounds.to_path_buf(), sounds.join("original"), sounds.join("original").join("Sounds")] {
+        match std::fs::symlink_metadata(&dir) {
+            Ok(m) if m.is_dir() => {}
+            Ok(_) => return Err(format!("{}: not a folder", dir.display())),
+            Err(_) => std::fs::create_dir(&dir).map_err(|e| format!("{}: {e}", dir.display()))?,
+        }
+    }
+    let theme = sounds.join("original");
+    let mut names: Vec<String> = std::fs::read_dir(&from)
+        .map_err(|e| format!("{}: {e}", from.display()))?
+        .flatten()
+        .filter_map(|e| e.file_name().to_str().map(str::to_owned))
+        .filter(|n| {
+            n.to_ascii_lowercase().ends_with(".wav")
+                && !n.starts_with('.')
+                && n.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | ' '))
+        })
+        .take(1024)
+        .collect();
+    names.sort();
+    let mut copied = 0usize;
+    for n in &names {
+        let src = from.join(n);
+        let small = std::fs::symlink_metadata(&src).is_ok_and(|m| m.is_file() && m.len() <= SOUND_MAX);
+        if !small {
+            continue;
+        }
+        // the game asks for `<name>.wav`: the file keeps its name with the extension in lower case
+        let stem = n.get(..n.len().saturating_sub(4)).unwrap_or(n);
+        let to = theme.join("Sounds").join(format!("{stem}.wav"));
+        if replace(&to, |t| std::fs::copy(&src, t).map(drop).map_err(|e| e.to_string())).is_ok() {
+            copied += 1;
+        }
+    }
+    let txt = "# The original's sounds and music, taken from the player's own copy by drahtseilakt-toolbox; never shipped.\n\
+               name.en Original\nname.ru Оригинальная\nname.de Original\nname.zh 原版\n\
+               author Cyparade / Atari (the player's own copy)\nlicence the player's own copy, not to be shared\n\
+               fallback system\n";
+    replace(&theme.join("theme.txt"), |t| std::fs::write(t, txt).map_err(|e| e.to_string()))?;
+    Ok(format!("{}: {copied} of the copy's sounds", theme.display()))
 }
 
 /// [`run`] into the remastered folder `root`, reporting to `watch` and stopping when it is cancelled.
@@ -1185,6 +1239,34 @@ mod tests {
                 .width(),
             8
         );
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn the_original_sound_theme_is_made_from_the_copy() {
+        let root = std::env::temp_dir().join(format!("drahtseilakt-osounds-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("copy/Sounds")).unwrap();
+        std::fs::write(root.join("copy/Sounds/Misc_Fall.WAV"), b"RIFF").unwrap();
+        std::fs::write(root.join("copy/Sounds/readme.txt"), b"x").unwrap();
+        let data = Data { root: root.join("copy"), overlay: None };
+        let sounds = root.join("sounds");
+        let line = original_sounds(&data, &sounds).unwrap();
+        assert!(line.contains("1 of"), "{line}");
+        assert!(sounds.join("original/Sounds/Misc_Fall.wav").is_file());
+        assert!(!sounds.join("original/Sounds/readme.txt").exists());
+        assert!(std::fs::read_to_string(sounds.join("original/theme.txt")).unwrap().contains("fallback system"));
+        // a link where the theme goes is refused, never written through
+        #[cfg(unix)]
+        {
+            let other = root.join("other");
+            std::fs::create_dir_all(&other).unwrap();
+            let s2 = root.join("sounds2");
+            std::fs::create_dir_all(&s2).unwrap();
+            std::os::unix::fs::symlink(&other, s2.join("original")).unwrap();
+            assert!(original_sounds(&data, &s2).is_err());
+            assert!(std::fs::read_dir(&other).unwrap().next().is_none());
+        }
         std::fs::remove_dir_all(&root).unwrap();
     }
 

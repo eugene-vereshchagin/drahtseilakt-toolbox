@@ -34,7 +34,8 @@ always made: where a texture shows bricks in concrete (the floors' brick bands),
 (terracotta among beige or grey), raised, the mortar between them sunk, and the game draws it with parallax, so the
 bricks stand out at a glancing view too; wood, stone and metal are left alone. `relief DIR` makes the relief of one
 level folder of the open format again, without remastering it. `--model` picks another Real-ESRGAN model put into its `models/` folder (the default, realesrgan-x4plus, comes with
-it). Run it again after a newer toolbox to bring the levels up to date.
+it). `remaster` (or `sounds` alone) also makes the "original" sound theme in the game's data folder from the copy's
+sounds and music; it is the original's, so it stays on the player's machine. Run it again after a newer toolbox to bring the levels up to date.
 
 The toolbox never goes online and never touches the player's original copy.
 

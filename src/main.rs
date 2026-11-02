@@ -28,6 +28,8 @@ commands:
                       every level there its rounder shapes and make its textures larger; the game lists them in
                       Custom levels. Run it again after a newer toolbox to bring the levels up to date.
                       Brickwork in concrete is told by its colour and drawn with depth (masonry relief).
+  sounds              make only the 'original' sound theme from the copy's sounds and music (remaster makes
+                      it too); it stays in the game's data folder, never shared
   relief DIR          make one remastered level folder's relief again (masonry, and --relief if given)
 
 options:
@@ -96,6 +98,12 @@ fn main() -> ExitCode {
                 for line in remaster::run(&data, o.scale, &o.model, o.relief)? {
                     println!("{line}");
                 }
+                Ok(())
+            }
+            Some("sounds") => {
+                // only the "original" sound theme, from the copy's sounds and music
+                let data = gamedata::assets::Data::locate(o.data)?;
+                println!("{}", remaster::original_sounds(&data, &gamedata::profile::data_dir().join("sounds"))?);
                 Ok(())
             }
             Some("relief") => {

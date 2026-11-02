@@ -35,7 +35,8 @@ Ziegelbänder der Böden), werden die Ziegel an ihrer Farbe erkannt (Terrakotta 
 die Fugen dazwischen gesenkt, und das Spiel zeichnet es mit Parallax, sodass die Ziegel auch bei flachem Blick
 hervortreten; Holz, Stein und Metall bleiben unberührt. `relief DIR` macht das Relief eines Level-Ordners im offenen
 Format neu, ohne ihn zu remastern. `--model` wählt ein anderes Real-ESRGAN-Modell aus seinem Ordner `models/` (Standard ist
-realesrgan-x4plus, das mitkommt). Nach einer neueren Toolbox erneut ausführen, um die Level zu erneuern.
+realesrgan-x4plus, das mitkommt). `remaster` (oder `sounds` allein) macht auch das Klangthema „original“ im Datenordner des Spiels aus den Klängen
+und der Musik der Kopie; es ist das Original und bleibt auf dem Rechner des Spielers. Nach einer neueren Toolbox erneut ausführen, um die Level zu erneuern.
 
 Die Toolbox geht nie online und fasst die Originalkopie des Spielers nie an.
 
