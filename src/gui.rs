@@ -92,6 +92,44 @@ fn read_font(path: &Path) -> Option<Vec<u8>> {
     (u64::try_from(bytes.len()).ok()? <= FONT_MAX).then_some(bytes)
 }
 
+/// Where the window keeps its last choices: the game's data folder (the remastered levels' home too).
+fn choices_file() -> PathBuf {
+    gamedata::profile::data_dir().join("toolbox.txt")
+}
+
+/// The model and scale chosen last (`model NAME` and `scale N` lines); none when there is no such file or line.
+fn remembered() -> (Option<String>, Option<u32>) {
+    use std::io::Read;
+    let mut text = String::new();
+    let plain = std::fs::symlink_metadata(choices_file()).is_ok_and(|m| m.is_file());
+    if plain && let Ok(f) = std::fs::File::open(choices_file()) {
+        let _ = f.take(4096).read_to_string(&mut text);
+    }
+    let value = |key: &str| {
+        text.lines()
+            .filter_map(|l| l.split_once(' '))
+            .find(|(k, _)| *k == key)
+            .map(|(_, v)| v.trim().to_owned())
+    };
+    let scale = value("scale").and_then(|v| v.parse::<u32>().ok()).filter(|n| (1..=8).contains(n));
+    (value("model").filter(|m| !m.is_empty() && m.len() <= 64), scale)
+}
+
+/// Keeps the model and scale for next time (written beside and moved in; a failure only loses the choice).
+fn remember(model: &str, scale: u32) {
+    let path = choices_file();
+    let mut tmp = path.clone().into_os_string();
+    tmp.push(".new");
+    let tmp = PathBuf::from(tmp);
+    let writable = |p: &Path| std::fs::symlink_metadata(p).map_or(true, |m| m.is_file());
+    if writable(&path) && writable(&tmp) {
+        let _ = std::fs::remove_file(&tmp);
+        if std::fs::write(&tmp, format!("model {model}\nscale {scale}\n")).is_ok() {
+            let _ = std::fs::rename(&tmp, &path);
+        }
+    }
+}
+
 /// A run going on: its reports and the flag that stops it.
 struct Job {
     reports: Receiver<Result<Progress, String>>,
@@ -120,10 +158,12 @@ impl App {
             .ok()
             .map(|d| d.root);
         let models = remaster::models();
-        let model = if models.iter().any(|m| m == "realesrgan-x4plus") {
-            "realesrgan-x4plus".to_owned()
-        } else {
-            models.first().cloned().unwrap_or_default()
+        // the model and the scale chosen last time, when they are still there
+        let (kept_model, kept_scale) = remembered();
+        let model = match kept_model.filter(|m| models.contains(m)) {
+            Some(m) => m,
+            None if models.iter().any(|m| m == "realesrgan-x4plus") => "realesrgan-x4plus".to_owned(),
+            None => models.first().cloned().unwrap_or_default(),
         };
         App {
             lang: texts::system(),
@@ -132,7 +172,7 @@ impl App {
                 .map(|d| d.display().to_string())
                 .unwrap_or_default(),
             data,
-            scale: 4,
+            scale: kept_scale.unwrap_or(4),
             models,
             model,
             relief: 0.0,
@@ -154,6 +194,7 @@ impl App {
         let cancel = Arc::new(AtomicBool::new(false));
         let (stop, ctx2) = (cancel.clone(), ctx.clone());
         let (scale, model, relief) = (self.scale, self.model.clone(), self.relief);
+        remember(&model, scale);
         std::thread::spawn(move || {
             let data = gamedata::assets::Data { root, overlay: None };
             let out = gamedata::profile::dir(gamedata::profile::Kind::Remastered);

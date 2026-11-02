@@ -11,7 +11,8 @@ drahtseilakt-toolbox                     (the window)
 drahtseilakt-toolbox remaster [--scale N] [--model NAME] [--relief S] [--data DIR]
 ```
 
-Started without a command it opens its window (Linux X11 or Wayland, Windows, macOS): your copy of the game, the
+Started without a command it opens its window (Linux X11 or Wayland, Windows, macOS; it remembers the model and
+scale chosen last, in `toolbox.txt` in the game's data folder): your copy of the game, the
 scale, the Real-ESRGAN model, the relief, a Make button, the progress per level and part with Cancel, the result and
 a texture before and after. Its texts are in English, Russian, German and Simplified Chinese, from the system's
 language or chosen in the window; Chinese uses a font the system has (Noto CJK, Microsoft YaHei, PingFang...).
