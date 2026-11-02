@@ -110,30 +110,7 @@ pub fn run_in(
         has_model(prog, model)?;
     }
     let esrgan = esrgan.as_deref().map(|p| (p, model));
-    // the parts every level shares (the balls, the modules, the transformer), remade the same way into .shared/,
-    // where the game takes their looks and textures for remastered levels
-    let mut parts = vec![
-        "3D Entities/Balls.nmo".to_owned(),
-        "3D Entities/AnimTrafo.nmo".to_owned(),
-    ];
-    if let Some(ph) = data.file("3D Entities/PH") {
-        // a folder that cannot be read leaves the shared parts but Balls and the transformer, and says so
-        let listed = std::fs::read_dir(&ph);
-        if let Err(e) = &listed {
-            line(&mut out, watch, format!("{}: {e}", ph.display()));
-        }
-        let mut names: Vec<String> = listed
-            .into_iter()
-            .flatten()
-            .flatten()
-            .filter_map(|e| e.file_name().to_str().map(str::to_owned))
-            .filter(|n| n.to_ascii_lowercase().ends_with(".nmo"))
-            .take(1024)
-            .collect();
-        names.sort();
-        parts.extend(names.into_iter().map(|n| format!("3D Entities/PH/{n}")));
-    }
-    let total = levels.len() + parts.len();
+    let total = levels.len();
     for (step, dir) in levels.into_iter().enumerate() {
         if watch.stopped() {
             line(&mut out, watch, CANCELLED.to_owned());
@@ -160,6 +137,9 @@ pub fn run_in(
                     .filter(|&k| format!("Level_{k:02}") == n)
             })
             .and_then(|n| from_copy(data, n));
+        // its parts (balls, transformer, modules) and game files (sky, particles, shadow, sounds) go into its own
+        // game folder, remade as it is, so it plays without the copy's level files
+        let model = original.as_ref().map(|l| l.level.clone());
         match shapes(&dir, original.map(|l| l.level), data) {
             Ok(n) => line(
                 &mut out,
@@ -212,68 +192,97 @@ pub fn run_in(
                 format!("{}: no relief: {e}", dir.display()),
             ),
         }
-    }
-    let first = total - parts.len();
-    let (mut made, mut grown, mut reliefs) = (0, 0, 0);
-    for (step, rel) in parts.into_iter().enumerate() {
-        if watch.stopped() {
-            line(&mut out, watch, CANCELLED.to_owned());
-            return Ok(out);
-        }
-        (watch.report)(Progress::Step {
-            done: first + step,
-            total,
-            what: rel.clone(),
-        });
-        let Some(loaded) = data
-            .file(&rel)
-            .and_then(|p| gamedata::assets::load_nmo(&p).ok())
-        else {
-            continue;
-        };
-        let dir = gamedata::assets::remade_dir(&rel);
-        if let Err(e) = real_dirs(root, &dir.join("textures")) {
-            line(&mut out, watch, format!("{rel}: not remade: {e}"));
-            continue;
-        }
-        match shapes(&dir, Some(loaded.level), data) {
-            Ok(_) => made += 1,
-            Err(e) => {
-                line(&mut out, watch, format!("{rel}: not remade: {e}"));
-                continue;
+        if let Some(model) = &model {
+            let l = game_files(
+                data,
+                root,
+                &dir,
+                model,
+                factor,
+                esrgan,
+                relief_strength,
+                &mut out,
+                watch,
+            );
+            line(&mut out, watch, l);
+            if watch.stopped() {
+                line(&mut out, watch, CANCELLED.to_owned());
+                return Ok(out);
             }
         }
-        if factor >= 2 {
-            match level(&dir, factor, esrgan, &mut out, watch) {
-                Ok(n) => grown += n,
-                Err(e) => line(
-                    &mut out,
-                    watch,
-                    format!("{rel}: textures left as they were: {e}"),
-                ),
-            }
-        }
-        if watch.stopped() {
-            line(&mut out, watch, format!("{rel}: {PART_GROWN}"));
-            line(&mut out, watch, CANCELLED.to_owned());
-            return Ok(out);
-        }
-        match relief(&dir, factor, relief_strength) {
-            Ok(n) => reliefs += n,
-            Err(e) => line(&mut out, watch, format!("{rel}: no relief: {e}")),
-        }
     }
-    let summary = format!(
-        "{}: {made} shared parts remade, {grown} of their textures x{factor}, {reliefs} normal maps",
-        root.join(".shared").display()
-    );
-    line(&mut out, watch, summary);
     (watch.report)(Progress::Step {
         done: total,
         total,
         what: String::new(),
     });
     Ok(out)
+}
+
+/// Writes a level's parts (the balls, the transformer, its modules) into its game folder, remade as the level is
+/// (rounder shapes, larger textures, relief when asked), and copies the game files it uses (sky, particles, shadow,
+/// sounds) beside them; returns the line that says how it went.
+#[allow(clippy::too_many_arguments)]
+fn game_files(
+    data: &Data,
+    root: &Path,
+    dir: &Path,
+    model: &level::Level,
+    factor: u32,
+    esrgan: Option<(&Path, &str)>,
+    relief_strength: f32,
+    out: &mut Vec<String>,
+    watch: &mut Watch<'_>,
+) -> String {
+    let game = dir.join(gamedata::assets::GAME_FILES);
+    let (mut parts, mut grown, mut files) = (0usize, 0usize, 0usize);
+    for rel in gamedata::assets::parts_used(data, model) {
+        if watch.stopped() {
+            break;
+        }
+        let Some(part) = data.part(&rel) else {
+            continue;
+        };
+        let stem = rel
+            .strip_suffix(".nmo")
+            .or_else(|| rel.strip_suffix(".NMO"))
+            .unwrap_or(&rel);
+        let part_dir = game.join(stem);
+        if let Err(e) = real_dirs(root, &part_dir.join("textures")) {
+            out.push(format!("{}: not remade: {e}", part_dir.display()));
+            continue;
+        }
+        if let Err(e) = shapes(&part_dir, Some(part.level), data) {
+            out.push(format!("{}: not remade: {e}", part_dir.display()));
+            continue;
+        }
+        parts += 1;
+        if factor >= 2 {
+            match level(&part_dir, factor, esrgan, out, watch) {
+                Ok(n) => grown += n,
+                Err(e) => out.push(format!(
+                    "{}: textures left as they were: {e}",
+                    part_dir.display()
+                )),
+            }
+        }
+        if let Err(e) = relief(&part_dir, factor, relief_strength) {
+            out.push(format!("{}: no relief: {e}", part_dir.display()));
+        }
+    }
+    if real_dirs(root, &game).is_ok() {
+        for rel in gamedata::assets::files_used(data, model) {
+            let Some(src) = data.file(&rel) else { continue };
+            match gamedata::assets::copy_into(&src, &game, &rel) {
+                Ok(()) => files += 1,
+                Err(e) => out.push(format!("{rel}: not copied: {e}")),
+            }
+        }
+    }
+    format!(
+        "{}: {parts} parts remade ({grown} of their textures x{factor}), {files} game files",
+        game.display()
+    )
 }
 
 /// Original level `n` from the copy's own file; none when the copy lacks it (the game then plays the remastered
@@ -971,7 +980,10 @@ mod tests {
         std::fs::create_dir(&tmp).unwrap();
         std::os::unix::fs::symlink(&outside, tmp.join("level.gltf")).unwrap();
         std::os::unix::fs::symlink(&outside, tmp.join("level.bin")).unwrap();
-        let data = Data { root: root.clone() };
+        let data = Data {
+            root: root.clone(),
+            overlay: None,
+        };
         assert_eq!(shapes(&dir, None, &data).unwrap(), 0);
         assert_eq!(std::fs::read(&outside).unwrap(), b"keep");
         assert!(
@@ -1048,10 +1060,16 @@ mod tests {
             image::ExtendedColorType::Rgba8,
         )
         .unwrap();
-        // an empty copy of the game: no originals, no shared parts
+        // an empty copy of the game: no originals (a level not made from the copy gets no parts)
         let copy = root.join("copy");
         std::fs::create_dir_all(&copy).unwrap();
-        (root, Data { root: copy })
+        (
+            root,
+            Data {
+                root: copy,
+                overlay: None,
+            },
+        )
     }
 
     #[test]
@@ -1067,7 +1085,7 @@ mod tests {
         let out = run_in(&data, &root, 2, "realesrgan-x4plus", 0.0, &mut watch).unwrap();
         assert!(
             seen.iter()
-                .any(|p| matches!(p, Progress::Step { done: 0, total: 3, what } if what == "Mine")),
+                .any(|p| matches!(p, Progress::Step { done: 0, total: 1, what } if what == "Mine")),
             "{seen:?}"
         );
         assert!(
@@ -1077,8 +1095,8 @@ mod tests {
         assert!(seen.iter().any(|p| matches!(
             p,
             Progress::Step {
-                done: 3,
-                total: 3,
+                done: 1,
+                total: 1,
                 ..
             }
         )));

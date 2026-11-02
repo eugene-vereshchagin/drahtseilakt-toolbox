@@ -21,8 +21,9 @@ each level rounder shapes (written into the level beside the original meshes, wh
 are the same) and makes its textures N times larger (default 4; 1 leaves them). With Real-ESRGAN the textures gain
 detail, else they are resampled with Lanczos (as are textures under 64 pixels, where it would invent detail). Real-ESRGAN is looked for in `realesrgan/` beside the toolbox's
 program, then on the PATH; the version used is pinned in [third-party.txt](third-party.txt). The originals are kept
-in `textures.original/`. The parts all levels share (the balls, the modules, the transformer) are remade the same
-way into the hidden `levels/remastered/.shared/`, and the game draws them so in remastered levels. Original levels
+in `textures.original/`. Each level's parts (the balls, the modules, the transformer) are remade the same way into
+its own `game/` folder, with its sky, particles, shadow and sounds, so the level plays without the copy's level
+files (the game's open-format.md). Original levels
 are made again from the copy on each run. A texture that repeats as a tile grows with its other side around it, so no seams show where tiles meet.
 With `--relief S` each lit texture also gets a normal map of strength S made from its own picture, which the game
 uses for remastered levels. It is off by default: guessed from the picture, the relief deepens every crack and gap

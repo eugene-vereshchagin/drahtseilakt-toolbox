@@ -155,7 +155,7 @@ impl App {
         let (stop, ctx2) = (cancel.clone(), ctx.clone());
         let (scale, model, relief) = (self.scale, self.model.clone(), self.relief);
         std::thread::spawn(move || {
-            let data = gamedata::assets::Data { root };
+            let data = gamedata::assets::Data { root, overlay: None };
             let out = gamedata::profile::dir(gamedata::profile::Kind::Remastered);
             let tell = send.clone();
             let repaint = ctx2.clone();
