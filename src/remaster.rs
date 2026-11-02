@@ -391,11 +391,18 @@ fn write_level(dir: &Path, level: &level::Level) -> Result<(), String> {
 /// Gives the level's lit, opaque or alpha-tested materials a normal map made from their texture as it is now (after
 /// the upscale), written into textures/ beside the others and named in the level file. A level that has normal maps
 /// already (one not made from the copy anew) is left as it is. Returns how many maps were made.
-fn relief(dir: &Path, scale: u32, strength: f32) -> Result<usize, String> {
-    // none asked for: the level is left with its textures alone (it was just rebuilt without normal maps)
-    if strength <= 0.0 {
-        return Ok(0);
+/// One remastered level's folder: its relief made again, its normal maps removed from the level first.
+pub fn relief_folder(dir: &Path, scale: u32, strength: f32) -> Result<usize, String> {
+    let mut level = level::open::import(dir)?;
+    for m in &mut level.materials {
+        m.normal = None;
+        m.parallax = 0.0;
     }
+    write_level(dir, &level)?;
+    relief(dir, scale, strength)
+}
+
+fn relief(dir: &Path, scale: u32, strength: f32) -> Result<usize, String> {
     let mut level = level::open::import(dir)?;
     if level.materials.iter().any(|m| m.normal.is_some()) {
         return Ok(0);
@@ -403,7 +410,8 @@ fn relief(dir: &Path, scale: u32, strength: f32) -> Result<usize, String> {
     if !real_dir(&dir.join("textures")) {
         return Err("textures/ missing or a link".into());
     }
-    let mut made: std::collections::HashMap<usize, usize> = std::collections::HashMap::new();
+    // each texture's map once: its index and whether it is masonry (drawn with parallax)
+    let mut made: std::collections::HashMap<usize, (usize, bool)> = std::collections::HashMap::new();
     for k in 0..level.materials.len() {
         let Some(m) = level.materials.get(k) else {
             continue;
@@ -414,7 +422,7 @@ fn relief(dir: &Path, scale: u32, strength: f32) -> Result<usize, String> {
         else {
             continue;
         };
-        let normal = match made.get(&t) {
+        let (normal, masonry) = match made.get(&t) {
             Some(&n) => n,
             None => {
                 let Some(base) = level.textures.get(t) else {
@@ -433,8 +441,16 @@ fn relief(dir: &Path, scale: u32, strength: f32) -> Result<usize, String> {
                 if ow.min(oh) < ESRGAN_MIN_SIDE {
                     continue;
                 }
-                let grown = (img.width() / ow.max(1)).max(1).min(scale.max(1));
-                let map = crate::normals::normal_map(&img, grown, strength);
+                // masonry (bricks told by colour) always; the brightness relief only when asked for
+                let masonry = original.as_ref().is_some_and(crate::masonry::is_masonry);
+                let map = match (&original, masonry) {
+                    (Some(o), true) => crate::masonry::map(o, img.dimensions()),
+                    _ if strength > 0.0 => {
+                        let grown = (img.width() / ow.max(1)).max(1).min(scale.max(1));
+                        crate::normals::normal_map(&img, grown, strength)
+                    }
+                    _ => continue,
+                };
                 let name = format!("{}_normal", base.name);
                 let n = level.textures.len();
                 let path = dir.join(level::open::texture_file(n, &name));
@@ -447,12 +463,13 @@ fn relief(dir: &Path, scale: u32, strength: f32) -> Result<usize, String> {
                     source: level::TextureSource::File(path.to_string_lossy().into_owned()),
                     color_key: None,
                 });
-                made.insert(t, n);
-                n
+                made.insert(t, (n, masonry));
+                (n, masonry)
             }
         };
         if let Some(m) = level.materials.get_mut(k) {
             m.normal = Some(normal);
+            m.parallax = if masonry { crate::masonry::DEPTH } else { 0.0 };
         }
     }
     if !made.is_empty() {

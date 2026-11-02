@@ -9,6 +9,7 @@ folders; everything heavy that makes levels look modern lives here, so the game 
 ```
 drahtseilakt-toolbox                     (the window)
 drahtseilakt-toolbox remaster [--scale N] [--model NAME] [--relief S] [--data DIR]
+drahtseilakt-toolbox relief DIR [--scale N] [--relief S]
 ```
 
 Started without a command it opens its window (Linux X11 or Wayland, Windows, macOS; it remembers the model and
@@ -28,7 +29,11 @@ files (the game's open-format.md). Original levels
 are made again from the copy on each run. A texture that repeats as a tile grows with its other side around it, so no seams show where tiles meet.
 With `--relief S` each lit texture also gets a normal map of strength S made from its own picture, which the game
 uses for remastered levels. It is off by default: guessed from the picture, the relief deepens every crack and gap
-(at 8 the world looked etched by acid); keep it low, 1 to 3. `--model` picks another Real-ESRGAN model put into its `models/` folder (the default, realesrgan-x4plus, comes with
+(at 8 the world looked etched by acid); keep it low, 1 to 3. Masonry is
+always made: where a texture shows bricks in concrete (the floors' brick bands), the bricks are told by their colour
+(terracotta among beige or grey), raised, the mortar between them sunk, and the game draws it with parallax, so the
+bricks stand out at a glancing view too; wood, stone and metal are left alone. `relief DIR` makes the relief of one
+level folder of the open format again, without remastering it. `--model` picks another Real-ESRGAN model put into its `models/` folder (the default, realesrgan-x4plus, comes with
 it). Run it again after a newer toolbox to bring the levels up to date.
 
 The toolbox never goes online and never touches the player's original copy.

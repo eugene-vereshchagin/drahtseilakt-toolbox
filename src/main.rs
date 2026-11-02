@@ -9,6 +9,7 @@
 #![allow(clippy::arithmetic_side_effects, clippy::indexing_slicing)]
 
 mod gui;
+mod masonry;
 mod normals;
 mod remaster;
 mod smooth;
@@ -26,6 +27,8 @@ commands:
   remaster            convert the original levels the copy has into levels/remastered (the open format), give
                       every level there its rounder shapes and make its textures larger; the game lists them in
                       Custom levels. Run it again after a newer toolbox to bring the levels up to date.
+                      Brickwork in concrete is told by its colour and drawn with depth (masonry relief).
+  relief DIR          make one remastered level folder's relief again (masonry, and --relief if given)
 
 options:
   --scale N           make the textures N times larger (2 to 32, default 4; 1 leaves them as they are). With
@@ -46,6 +49,8 @@ struct Options {
     model: String,
     relief: f32,
     data: Option<PathBuf>,
+    /// The folder a command works on (relief).
+    folder: Option<PathBuf>,
 }
 
 fn options(args: impl Iterator<Item = String>) -> Result<Options, String> {
@@ -55,6 +60,7 @@ fn options(args: impl Iterator<Item = String>) -> Result<Options, String> {
         model: "realesrgan-x4plus".into(),
         relief: 0.0,
         data: None,
+        folder: None,
     };
     let mut args = args;
     while let Some(a) = args.next() {
@@ -74,6 +80,7 @@ fn options(args: impl Iterator<Item = String>) -> Result<Options, String> {
             }
             "-h" | "--help" => o.command = Some("help".into()),
             c if !c.starts_with('-') && o.command.is_none() => o.command = Some(c.to_owned()),
+            c if !c.starts_with('-') && o.folder.is_none() => o.folder = Some(c.into()),
             other => return Err(format!("unknown option {other}\n\n{USAGE}")),
         }
     }
@@ -89,6 +96,13 @@ fn main() -> ExitCode {
                 for line in remaster::run(&data, o.scale, &o.model, o.relief)? {
                     println!("{line}");
                 }
+                Ok(())
+            }
+            Some("relief") => {
+                // one remastered level's folder: its relief (masonry, and the brightness relief if asked) made again
+                let dir = o.folder.ok_or("relief needs the level's folder")?;
+                let n = remaster::relief_folder(&dir, o.scale, o.relief)?;
+                println!("{}: {n} relief maps", dir.display());
                 Ok(())
             }
             Some("help") => {

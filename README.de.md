@@ -9,6 +9,7 @@ Level-Ordnern liegt; alles Schwere, was Level modern aussehen lässt, lebt hier,
 ```
 drahtseilakt-toolbox                     (das Fenster)
 drahtseilakt-toolbox remaster [--scale N] [--model NAME] [--relief S] [--data DIR]
+drahtseilakt-toolbox relief DIR [--scale N] [--relief S]
 ```
 
 Ohne Befehl gestartet öffnet die Toolbox ihr Fenster (Linux X11 oder Wayland, Windows, macOS; Modell und Faktor
@@ -29,7 +30,11 @@ Ordner `game/` umgearbeitet, mit Himmel, Partikeln, Schatten und Klängen, sodas
 Kopie spielt (open-format.md des Spiels). Original-Level werden bei jedem Lauf neu aus der Kopie gebaut. Eine Textur, die sich als Kachel wiederholt, wächst mit ihrer Gegenseite ringsum, sodass an den Kachelgrenzen keine
 Nähte entstehen. Mit `--relief S` bekommt jede beleuchtete Textur außerdem eine Normal Map der Stärke S
 aus ihrem eigenen Bild, die das Spiel in Remaster-Leveln benutzt. Standardmäßig aus: aus dem Bild geraten, vertieft das
-Relief jeden Riss und jede Fuge (bei 8 sah die Welt wie von Säure zerfressen aus); niedrig halten, 1 bis 3. `--model` wählt ein anderes Real-ESRGAN-Modell aus seinem Ordner `models/` (Standard ist
+Relief jeden Riss und jede Fuge (bei 8 sah die Welt wie von Säure zerfressen aus); niedrig halten, 1 bis 3. Mauerwerk entsteht immer: wo eine Textur Ziegel in Beton zeigt (die
+Ziegelbänder der Böden), werden die Ziegel an ihrer Farbe erkannt (Terrakotta zwischen Beige oder Grau), angehoben,
+die Fugen dazwischen gesenkt, und das Spiel zeichnet es mit Parallax, sodass die Ziegel auch bei flachem Blick
+hervortreten; Holz, Stein und Metall bleiben unberührt. `relief DIR` macht das Relief eines Level-Ordners im offenen
+Format neu, ohne ihn zu remastern. `--model` wählt ein anderes Real-ESRGAN-Modell aus seinem Ordner `models/` (Standard ist
 realesrgan-x4plus, das mitkommt). Nach einer neueren Toolbox erneut ausführen, um die Level zu erneuern.
 
 Die Toolbox geht nie online und fasst die Originalkopie des Spielers nie an.
