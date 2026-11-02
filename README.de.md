@@ -10,6 +10,7 @@ Level-Ordnern liegt; alles Schwere, was Level modern aussehen lässt, lebt hier,
 drahtseilakt-toolbox                     (das Fenster)
 drahtseilakt-toolbox remaster [--scale N] [--model NAME] [--relief S] [--data DIR]
 drahtseilakt-toolbox relief DIR [--scale N] [--relief S]
+drahtseilakt-toolbox import-maps DIR [--to DIR]
 ```
 
 Ohne Befehl gestartet öffnet die Toolbox ihr Fenster (Linux X11 oder Wayland, Windows, macOS; Modell und Faktor
@@ -38,6 +39,21 @@ Format neu, ohne ihn zu remastern. `--model` wählt ein anderes Real-ESRGAN-Mode
 realesrgan-x4plus, das mitkommt). `remaster` (oder `sounds` allein) macht auch das Klangthema „original“ im Datenordner des Spiels aus den Klängen
 und der Musik der Kopie; es ist das Original und bleibt auf dem Rechner des Spielers. Nach einer neueren Toolbox erneut ausführen, um die Level zu erneuern.
 
+`import-maps DIR` sortiert eine geladene Sammlung von Community-Karten (ein entpacktes Archiv: Ordner beliebiger
+Tiefe, Bilder, Dokumente) in `levels/community/` des Spiels (oder `--to DIR`) so, wie das Spiel sie zeigt (levels.md
+des Spiels, „Ein Level ist ein Ordner“): ein Ordner je Karte mit ihrer `.nmo`, ihrem Bild daneben als
+`preview.jpg`/`.png` und einer `level.txt`, die sagt, woher sie kommt (und den ganzen Titel, wenn der Ordnername
+Zeichen verlieren musste). Ein nichtssagender Dateiname (`Level_07.NMO` in „45-Degree Rotated Maps“) wird nach seiner
+Sammlung benannt („45-Degree Rotated - Level 07“); dieselbe Datei zweimal gefunden ist ein Level; gepackte Archive
+(`.tar.gz`, `.zip`...) werden genannt, nicht geöffnet; Namen taugen für Linux, Windows und macOS (keine reservierten
+Namen, keine Punkte oder Leerzeichen am Ende, höchstens 40 Zeichen, an einer Wortgrenze mit „…“ gekürzt, ein zweites
+„Hello Mars“ wird „Hello Mars (2)“). Links werden nie verfolgt, Tiefe und Anzahl sind begrenzt, die Quelle wird nur
+gelesen, und jedes Level wird in einen versteckten Ordner geschrieben und an seinen Platz umbenannt. Ein zweiter Lauf
+fügt nur Neues hinzu. Das Fenster hat dasselbe als Feld und Import-Knopf.
+Einen Download außerhalb von `levels/community/` entpacken (etwa in Downloads): eine Quelle im Zielordner wird
+abgelehnt. Ein unlesbarer Ordner des Downloads wird übersprungen und genannt; ausgegebene Namen haben ihre
+Steuerzeichen maskiert.
+
 Die Toolbox geht nie online und fasst die Originalkopie des Spielers nie an.
 
 ## Bauen
@@ -45,5 +61,10 @@ Die Toolbox geht nie online und fasst die Originalkopie des Spielers nie an.
 Das Lesen der Level teilt die Toolbox mit dem Spiel: Sie braucht einen Klon des Spiel-Repositorys daneben, unter
 `../ballance/drahtseilakt`. Dann `cargo build --release --offline`. Für Real-ESRGAN den festgelegten Download nach
 `third_party/realesrgan/` entpacken und `target/release/realesrgan` darauf verlinken.
+
+## Wer es gemacht hat
+
+Code und Dokumentation schreibt **Claude** (das KI-Modell von Anthropic, in Claude Code). **Veresk** führt das
+Projekt: die Idee, die Entscheidungen, der Plan und das Urteil, was stimmt. Die Commits tragen beide Namen.
 
 GPL-3.0-only, wie das Spiel.

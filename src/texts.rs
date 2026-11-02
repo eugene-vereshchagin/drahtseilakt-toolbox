@@ -114,6 +114,21 @@ text!(
     "Spielen im Spiel: Start → Remastered (erweiterter Modus).",
     "在游戏中游玩：Start → Remastered（扩展模式）。"
 );
+text!(
+    MAPS,
+    "Community maps: an unpacked download, sorted into levels/community, one folder a level",
+    "Любительские карты: распакованная загрузка — по папкам в levels/community, папка на уровень",
+    "Community-Karten: ein entpackter Download, in levels/community einsortiert, ein Ordner je Level",
+    "自制地图：把下载的合集（已解压）整理到游戏的 levels/community，每个关卡一个文件夹"
+);
+text!(IMPORT, "Import", "Импортировать", "Importieren", "导入");
+text!(
+    PLAY_MAPS,
+    "Play them in the game: Start → Community maps (extended mode).",
+    "Играть в игре: Start → Community maps (расширенный режим).",
+    "Spielen im Spiel: Start → Community maps (erweiterter Modus).",
+    "在游戏中游玩：Start → Community maps（扩展模式）。"
+);
 
 #[cfg(test)]
 mod tests {

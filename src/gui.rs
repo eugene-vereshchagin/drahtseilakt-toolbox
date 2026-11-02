@@ -144,11 +144,15 @@ struct App {
     models: Vec<String>,
     model: String,
     relief: f32,
+    /// The folder of downloaded community maps to import.
+    maps_field: String,
     job: Option<Job>,
     step: Option<(usize, usize, String)>,
     lines: Vec<String>,
     outcome: Option<Result<(), String>>,
     preview: Option<(egui::TextureHandle, egui::TextureHandle)>,
+    /// The last run was an import of community maps (its result says where to play them).
+    imported: bool,
     last_texture: Option<(PathBuf, PathBuf)>,
 }
 
@@ -176,11 +180,13 @@ impl App {
             models,
             model,
             relief: 0.0,
+            maps_field: String::new(),
             job: None,
             step: None,
             lines: Vec::new(),
             outcome: None,
             preview: None,
+            imported: false,
             last_texture: None,
         }
     }
@@ -227,6 +233,36 @@ impl App {
         self.lines.clear();
         self.step = None;
         self.outcome = None;
+    }
+
+    /// Starts importing the community maps of the folder typed (import.rs) on a worker thread.
+    fn start_import(&mut self, ctx: &egui::Context) {
+        let from = PathBuf::from(self.maps_field.trim());
+        if from.as_os_str().is_empty() {
+            return;
+        }
+        let (send, reports) = channel();
+        let cancel = Arc::new(AtomicBool::new(false));
+        let (stop, ctx2) = (cancel.clone(), ctx.clone());
+        std::thread::spawn(move || {
+            let to = gamedata::profile::dir(gamedata::profile::Kind::Community);
+            let (tell, repaint) = (send.clone(), ctx2.clone());
+            let mut line = move |l: String| {
+                let _ = tell.send(Ok(Progress::Line(l)));
+                repaint.request_repaint();
+            };
+            let result = crate::import::import(&from, &to, &mut line, &stop);
+            if let Ok(s) = &result {
+                let _ = send.send(Ok(Progress::Line(crate::import::summary_line(s, &to))));
+            }
+            let _ = send.send(result.map(|_| Progress::Step { done: 0, total: 0, what: String::new() }));
+            ctx2.request_repaint();
+        });
+        self.job = Some(Job { reports, cancel });
+        self.lines.clear();
+        self.step = None;
+        self.outcome = None;
+        self.imported = true;
     }
 
     /// Takes what the run has reported since the last frame.
@@ -401,6 +437,7 @@ impl eframe::App for App {
                     .add_enabled(self.data.is_some(), egui::Button::new(texts::MAKE.get(l)))
                     .clicked()
                 {
+                    self.imported = false;
                     self.start(ctx);
                 }
             });
@@ -418,7 +455,7 @@ impl eframe::App for App {
             match &self.outcome {
                 Some(Ok(())) => {
                     ui.label(texts::DONE.get(l));
-                    ui.label(texts::PLAY.get(l));
+                    ui.label(if self.imported { texts::PLAY_MAPS.get(l) } else { texts::PLAY.get(l) });
                 }
                 Some(Err(e)) => {
                     ui.colored_label(
@@ -428,6 +465,17 @@ impl eframe::App for App {
                 }
                 None => {}
             }
+            ui.separator();
+
+            // community maps: a downloaded collection sorted into the game's level folders
+            ui.label(texts::MAPS.get(l));
+            ui.horizontal(|ui| {
+                ui.add_enabled(!busy, egui::TextEdit::singleline(&mut self.maps_field).desired_width(420.0));
+                let ready = !busy && !self.maps_field.trim().is_empty();
+                if ui.add_enabled(ready, egui::Button::new(texts::IMPORT.get(l))).clicked() {
+                    self.start_import(ctx);
+                }
+            });
             ui.separator();
 
             ui.columns(2, |cols| {

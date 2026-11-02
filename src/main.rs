@@ -9,6 +9,7 @@
 #![allow(clippy::arithmetic_side_effects, clippy::indexing_slicing)]
 
 mod gui;
+mod import;
 mod masonry;
 mod normals;
 mod remaster;
@@ -31,6 +32,10 @@ commands:
   sounds              make only the 'original' sound theme from the copy's sounds and music (remaster makes
                       it too); it stays in the game's data folder, never shared
   relief DIR          make one remastered level folder's relief again (masonry, and --relief if given)
+  import-maps DIR     sort a downloaded collection of community maps (an unpacked archive, folders of any depth)
+                      into the game's levels/community: one folder per map with its .nmo, its preview picture
+                      and a level.txt with its title; the same map twice becomes one level; packed archives are
+                      named, not opened; DIR is only read. --to DIR imports elsewhere
 
 options:
   --scale N           make the textures N times larger (2 to 32, default 4; 1 leaves them as they are). With
@@ -41,6 +46,7 @@ options:
                       NAME.param and NAME.bin are in its models/ folder
   --relief S          give lit textures normal maps of strength S (0 to 20, default 0: none); the relief is
                       guessed from the picture, so every crack and gap is deepened: keep it low (1 to 3)
+  --to DIR            with import-maps: the folder to make the levels in (default the game's levels/community)
   --data DIR          the Ballance folder (default: $OPENBALLANCE_DATA, then the copy the game imported)
   -h, --help          this text
 ";
@@ -51,8 +57,10 @@ struct Options {
     model: String,
     relief: f32,
     data: Option<PathBuf>,
-    /// The folder a command works on (relief).
+    /// The folder a command works on (relief, import-maps).
     folder: Option<PathBuf>,
+    /// Where import-maps makes its levels.
+    to: Option<PathBuf>,
 }
 
 fn options(args: impl Iterator<Item = String>) -> Result<Options, String> {
@@ -63,6 +71,7 @@ fn options(args: impl Iterator<Item = String>) -> Result<Options, String> {
         relief: 0.0,
         data: None,
         folder: None,
+        to: None,
     };
     let mut args = args;
     while let Some(a) = args.next() {
@@ -75,6 +84,7 @@ fn options(args: impl Iterator<Item = String>) -> Result<Options, String> {
                 o.scale = n.clamp(1, 32);
             }
             "--data" => o.data = Some(value()?.into()),
+            "--to" => o.to = Some(value()?.into()),
             "--model" => o.model = value()?,
             "--relief" => {
                 let r: f32 = value()?.parse().map_err(|_| "--relief needs a number (0 to 20)".to_owned())?;
@@ -111,6 +121,14 @@ fn main() -> ExitCode {
                 let dir = o.folder.ok_or("relief needs the level's folder")?;
                 let n = remaster::relief_folder(&dir, o.scale, o.relief)?;
                 println!("{}: {n} relief maps", dir.display());
+                Ok(())
+            }
+            Some("import-maps") => {
+                let from = o.folder.ok_or("import-maps needs the folder of maps")?;
+                let to = o.to.unwrap_or_else(|| gamedata::profile::dir(gamedata::profile::Kind::Community));
+                let never = std::sync::atomic::AtomicBool::new(false);
+                let s = import::import(&from, &to, &mut |l| println!("{l}"), &never)?;
+                println!("{}", import::summary_line(&s, &to));
                 Ok(())
             }
             Some("help") => {
