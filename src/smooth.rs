@@ -15,9 +15,9 @@ use level::{Level, Mesh, Part};
 use std::collections::HashMap;
 
 /// The most a mesh's edges are cut into: enough for the original's 8- to 24-sided round shapes.
-const MAX_CUTS: u32 = 6;
-/// The bend that takes one more cut: about 12 degrees between an edge's normals.
-const CUT_ANGLE: f32 = 0.21;
+const MAX_CUTS: u32 = 8;
+/// The bend that takes one more cut: about 7 degrees (a 20-degree piece of a ring is cut in three).
+const CUT_ANGLE: f32 = 0.12;
 /// The most vertices a refined mesh may have (a mesh past it is drawn as it is).
 const MAX_VERTICES: usize = 1 << 22;
 /// Faces meeting at less than this angle are one smooth surface (cos 40 degrees).
@@ -138,6 +138,38 @@ fn corner_normals(m: &Mesh, tris: &[[u32; 3]]) -> Option<Vec<[Vec3; 3]>> {
     Some(out)
 }
 
+/// The bend of the edge lo..hi in the line before, lo, hi, after: Catmull-Rom tangents, a third of the edge long;
+/// none when it would bow out more than an arc of the original's round things does (MAX_BOW), or the line is not a
+/// curve at all.
+fn curve(before: Vec3, lo: Vec3, hi: Vec3, after: Vec3) -> Option<Bend> {
+    let len = lo.distance(hi);
+    let (t_lo, t_hi) = (
+        (hi - before).normalize_or_zero(),
+        (after - lo).normalize_or_zero(),
+    );
+    if len <= 0.0 || t_lo == Vec3::ZERO || t_hi == Vec3::ZERO {
+        return None;
+    }
+    let near_lo = lo + t_lo * (len / 3.0);
+    let near_hi = hi - t_hi * (len / 3.0);
+    // how far the controls stand off the chord: an arc's middle bows about three quarters of that
+    let chord = (hi - lo) / len;
+    let off = |p: Vec3| {
+        let d = p - lo;
+        (d - chord * d.dot(chord)).length()
+    };
+    let bow = 0.75 * off(near_lo).max(off(near_hi));
+    if bow > MAX_BOW || bow < 1e-4 * len {
+        return None;
+    }
+    Some(Bend {
+        near_lo,
+        near_hi,
+        amount: 8.0 * bow,
+        angle: t_lo.dot(t_hi).clamp(-1.0, 1.0).acos(),
+    })
+}
+
 fn cubic(a: Vec3, b: Vec3, c: Vec3, d: Vec3, t: f32) -> Vec3 {
     let s = 1.0 - t;
     a * (s * s * s) + b * (3.0 * s * s * t) + c * (3.0 * s * t * t) + d * (t * t * t)
@@ -166,16 +198,27 @@ pub fn mesh(m: &Mesh) -> Option<Mesh> {
     }
     // The edge from `from` to `at` goes on past `at` along the edge most nearly in line with it: its length, if any
     // goes on within 45 degrees.
-    let goes_on = |from: Vec3, at: Vec3| -> Option<f32> {
+    // The corner the line from `from` through `at` goes on to: among the edges at `at` within 45 degrees of the line,
+    // the one most in line and most like the edge in length (a ring goes on by its next piece, not by the shorter
+    // edge of something joined to it, as a pedestal on a platform's rim).
+    let beyond = |from: Vec3, at: Vec3| -> Option<Vec3> {
         let dir = (at - from).normalize_or_zero();
+        let len = from.distance(at).max(1e-6);
+        let score = |p: Vec3| {
+            let along = (p - at).normalize_or_zero().dot(dir);
+            let ratio = (p.distance(at) / len).max(1e-6).ln().abs();
+            (along, along - 0.5 * ratio)
+        };
         joined
             .get(&key(at))?
             .iter()
-            .map(|&p| (p - at, (p - at).normalize_or_zero().dot(dir)))
-            .filter(|&(_, along)| along > 0.7)
-            .max_by(|x, y| x.1.total_cmp(&y.1))
-            .map(|(d, _)| d.length())
+            .map(|&p| (p, score(p)))
+            .filter(|&(_, (along, _))| along > 0.7)
+            .max_by(|x, y| x.1.1.total_cmp(&y.1.1))
+            .map(|(p, _)| p)
     };
+    let goes_on =
+        |from: Vec3, at: Vec3| -> Option<f32> { beyond(from, at).map(|p| p.distance(at)) };
     let mut bends: HashMap<([i64; 3], [i64; 3]), Bend> = HashMap::new();
     let mut size = 0.0f32;
     for (t, n) in tris.iter().zip(&corners) {
@@ -207,6 +250,16 @@ pub fn mesh(m: &Mesh) -> Option<Mesh> {
                 .any(|next| len > RUN_RATIO * next);
             if run || e.amount / 8.0 > MAX_BOW {
                 e = bend(lo, hi, Vec3::ZERO, Vec3::ZERO);
+            } else if e.amount > 0.0
+                && let (Some(before), Some(after)) = (beyond(hi, lo), beyond(lo, hi))
+            {
+                // A bent edge in a line that goes on smoothly at both ends (a ring of a round thing) follows the
+                // line itself: its ends' tangents point from the corner before to the corner after (Catmull-Rom).
+                // Normals tilted by the faces of what joins the ring (a pedestal on a platform's rim) would bend
+                // it lopsided and leave the round thing a polygon.
+                if let Some(c) = curve(before, lo, hi, after) {
+                    e = c;
+                }
             }
             let keep = bends.get(&k).is_some_and(|old| old.amount >= e.amount);
             if !keep {
@@ -441,7 +494,7 @@ mod tests {
                 .indices
                 .iter()
                 .map(|&i| Vec3::from(r.positions[i as usize]))
-                .filter(|p| p.y > 0.5 && Vec3::new(p.x, 0.0, p.z).length() > 0.95)
+                .filter(|p| p.y > 0.5 && Vec3::new(p.x, 0.0, p.z).length() > 0.995)
                 .map(key)
                 .collect();
             v.sort();
