@@ -759,6 +759,7 @@ dependencies = [
 name = "gamedata"
 version = "0.1.0"
 dependencies = [
+ "glam",
  "image",
  "level",
  "libc",

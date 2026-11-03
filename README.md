@@ -10,7 +10,8 @@ folders; everything heavy that makes levels look modern lives here, so the game 
 drahtseilakt-toolbox                     (the window)
 drahtseilakt-toolbox remaster [--scale N] [--model NAME] [--relief S] [--data DIR]
 drahtseilakt-toolbox relief DIR [--scale N] [--relief S]
-drahtseilakt-toolbox import-maps DIR [--to DIR]
+drahtseilakt-toolbox import-maps DIR [--to DIR] [--catalogue FILE] [--unsorted DIR]
+drahtseilakt-toolbox import-maps --refresh DIR --catalogue FILE [--source DIR] [--unsorted DIR]
 ```
 
 Started without a command it opens its window (Linux X11 or Wayland, Windows, macOS; it remembers the model and
@@ -43,7 +44,7 @@ pictures, documents) into the game's `levels/community/` (or `--to DIR`), in the
 levels.md, "A level is a folder"): one folder per map with its `.nmo`, its picture beside it as `preview.jpg`/`.png`,
 and a `level.txt` saying where it came from (and its whole title when the folder's name had to lose characters). A
 generic file name (`Level_07.NMO` in "45-Degree Rotated Maps") is named after its collection ("45-Degree Rotated -
-Level 07"); the same file found twice becomes one level; packed archives (`.tar.gz`, `.zip`...) are named, not opened;
+Level 07"); the same file found twice becomes one level; packed archives (`.tar.gz`, `.zip`...) are not opened but set aside (below);
 names are made safe for Linux, Windows and macOS (no reserved names, no trailing dots or spaces, at most 40
 characters cut at a word with "…", a second "Hello Mars" becomes "Hello Mars (2)"). Links are never followed, depth
 and counts are capped, the source is only read, and each level is written into a hidden folder and renamed into
@@ -51,6 +52,30 @@ place. A second run adds only what is new. The window has the same as a field an
 Unpack a download outside `levels/community/` (in Downloads, say): a source inside the folder it imports into is
 refused. A folder of the download that cannot be read is skipped and named; names printed have control characters
 escaped.
+
+With `--catalogue FILE` (the community's catalogue, `CustomMapList.md` of
+[BallanceCustomMaps](https://github.com/pseudoacetyl/BallanceCustomMaps)) each map is looked up by its file's name
+and its folder's (case, punctuation, spaces, full-width characters and "v1.0"/"V1.0"/"1.0" do not matter; a version
+number the catalogue lacks is tried without, never as another version; a name two maps share, or one of fewer than
+three letters, matches nothing; a folder's name counts only for the one map in it). A map found gets in its
+`level.txt` `title =` (the English name), `title.zh =` (the original name, when it is another one in Chinese),
+`author =` and `difficulty =`: the game's scale is 1–10, so **the catalogue's 1–5 (with halves) is doubled** (3.5
+becomes 7; a range such as 2.5–3 takes its midpoint, rounded up: 6); no difficulty is written when the catalogue has
+none. With a catalogue, a map neither in it nor with a readme beside it (a `.txt`, `.md` or `.nfo`, or a document
+named as a readme or as the map) is not imported: like packed archives, it is copied into the **unsorted folder**
+(`--unsorted DIR`, by default `community-unsorted` beside the levels folder), under its path in the download, and a
+`README.txt` there lists each item and why it was set aside, to be looked at by hand. A map with a readme but not in
+the catalogue is imported with the title from its name and no difficulty. The catalogue is read as a stranger's
+file: at most 4 MiB, 20 000 rows and 1024 characters a cell, malformed rows skipped, values cleaned.
+
+`import-maps --refresh DIR --catalogue FILE --source DIR` brings a levels folder imported before (`levels/community`)
+up to the catalogue in place: each level's `level.txt` is written from the catalogue (looked up by its `source =`
+line and the folder's name; its comment, its `source =` line and other lines are kept), and a level folder that is
+not a single level (no map, or several), or whose map is neither in the catalogue nor has a readme (in its folder, or
+beside its source in the collection `--source DIR`, which the `source =` paths are relative to), is moved into the
+unsorted folder (renamed on the same disk; nothing is deleted). Only folders import-maps made (a level.txt with a
+`source =` line) are ever moved; a level whose source cannot be looked at is kept. Lines the catalogue has no value
+for (an `author =` of your own) are kept.
 
 The toolbox never goes online and never touches the player's original copy.
 

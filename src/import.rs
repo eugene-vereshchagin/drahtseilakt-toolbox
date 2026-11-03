@@ -10,6 +10,9 @@ use std::collections::{HashMap, HashSet};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
+use crate::catalogue::Catalogue;
+use crate::unsorted::{Reason, Unsorted};
+
 /// How deep folders are followed, how many entries are looked at, and how many levels one import makes at most.
 const DEPTH_MAX: usize = 8;
 const ENTRIES_MAX: usize = 200_000;
@@ -34,6 +37,24 @@ pub struct Summary {
     pub links: Vec<PathBuf>,
     /// Maps that could not be imported, and why.
     pub failed: Vec<String>,
+    /// Of the levels made: found in the catalogue, and kept for a readme beside them alone.
+    pub catalogued: usize,
+    pub readme_only: usize,
+    /// Items set aside into the unsorted folder: (path in it, why).
+    pub set_aside: Vec<(String, Reason)>,
+}
+
+/// How an import sorts: the catalogue (with one, a map neither in it nor with a readme beside it is set aside) and the
+/// folder things that do not fit are copied into.
+pub struct Sorting<'a> {
+    pub catalogue: Option<&'a Catalogue>,
+    pub unsorted: PathBuf,
+}
+
+/// The unsorted folder beside a levels folder: `levels/community` -> `levels/community-unsorted`.
+pub fn default_unsorted(to: &Path) -> PathBuf {
+    let parent = to.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
+    parent.join("community-unsorted")
 }
 
 /// One map found: its file and the folder it lies in.
@@ -47,6 +68,7 @@ struct Found {
 pub fn import(
     from: &Path,
     to: &Path,
+    sorting: &Sorting,
     tell: &mut dyn FnMut(String),
     stop: &std::sync::atomic::AtomicBool,
 ) -> Result<Summary, String> {
@@ -60,6 +82,15 @@ pub fn import(
     if src.starts_with(&to_be) || to_be.starts_with(&src) {
         return Err(format!(
             "{} and {} are inside one another",
+            from.display(),
+            to.display()
+        ));
+    }
+    let aside = canonical_to_be(&sorting.unsorted);
+    if aside.starts_with(&src) || src.starts_with(&aside) || aside.starts_with(&to_be) || to_be.starts_with(&aside) {
+        return Err(format!(
+            "{}: the unsorted folder must be beside, not inside, {} and {}",
+            sorting.unsorted.display(),
             from.display(),
             to.display()
         ));
@@ -87,8 +118,17 @@ pub fn import(
             by_hash.entry((fnv1a(&b), size)).or_default().push(file);
         }
     }
+    let mut unsorted = Unsorted::new(&sorting.unsorted);
+    for a in summary.archives.clone() {
+        let rel = a.strip_prefix(&src).unwrap_or(&a).to_path_buf();
+        match unsorted.copy(&src, &a, Reason::Archive) {
+            Ok(()) => tell(format!("set aside (packed archive): {}", shown(&rel))),
+            Err(e) => summary.failed.push(format!("{}: {e}", rel.display())),
+        }
+    }
     for (n, m) in maps.iter().enumerate() {
         if stop.load(std::sync::atomic::Ordering::Relaxed) {
+            let _ = unsorted.finish();
             return Err(format!("stopped after {} levels", summary.imported));
         }
         if n >= LEVELS_MAX {
@@ -123,12 +163,31 @@ pub fn import(
             summary.duplicates.push((rel, kept_rel));
             continue;
         }
-        let title = title_for(&m.file, &src);
-        match write_named(&dst, &title, &mut taken, &rel, &bytes, &m.file) {
+        let names = names_of(&m.file, &src);
+        let names: Vec<&str> = names.iter().map(AsRef::as_ref).collect();
+        let found = sorting.catalogue.and_then(|c| c.find(&names));
+        let readme = found.is_none() && has_readme(&m.file);
+        if sorting.catalogue.is_some() && found.is_none() && !readme {
+            match unsorted.copy(&src, &m.file, Reason::Uncatalogued) {
+                Ok(()) => tell(format!("set aside (not in the catalogue, no readme): {}", shown(&rel))),
+                Err(e) => summary.failed.push(format!("{}: {e}", rel.display())),
+            }
+            continue;
+        }
+        let (title, lines) = match &found {
+            Some(f) => (clean(f.title(), usize::MAX), f.lines()),
+            None => (title_for(&m.file, &src), Vec::new()),
+        };
+        match write_named(&dst, &title, &mut taken, &rel, &bytes, &m.file, &lines) {
             Ok(name) => {
                 // counted as imported only once it is there
                 by_hash.entry(key).or_default().push(m.file.clone());
                 summary.imported += 1;
+                if found.is_some() {
+                    summary.catalogued += 1;
+                } else if readme {
+                    summary.readme_only += 1;
+                }
                 tell(format!("{}  <-  {}", printable(&name), shown(&rel)));
             }
             Err(e) => {
@@ -141,13 +200,79 @@ pub fn import(
             }
         }
     }
-    for a in &summary.archives {
-        tell(format!("archive not opened (unpack it and import again): {}", shown(a)));
-    }
     for l in &summary.links {
         tell(format!("link not followed: {}", shown(l)));
     }
+    if let Err(e) = unsorted.finish() {
+        summary.failed.push(e);
+    }
+    summary.set_aside = unsorted.items().to_vec();
     Ok(summary)
+}
+
+/// The names a map is looked for by in the catalogue: its file's, then its folder's (a season's folder of one track),
+/// not the download's own.
+fn names_of<'a>(file: &'a Path, root: &Path) -> Vec<std::borrow::Cow<'a, str>> {
+    let mut names = Vec::new();
+    if let Some(stem) = file.file_stem() {
+        names.push(stem.to_string_lossy());
+    }
+    if let Some(dir) = file.parent().filter(|p| *p != root)
+        && let Some(folder) = dir.file_name()
+        && maps_in(dir) == 1
+    {
+        names.push(folder.to_string_lossy());
+    }
+    names
+}
+
+/// How many plain `.nmo` files lie directly in `dir` (a folder's name stands for its map only when it holds one).
+fn maps_in(dir: &Path) -> usize {
+    std::fs::read_dir(dir).map_or(0, |r| {
+        r.flatten()
+            .take(4096)
+            .filter(|e| e.file_type().is_ok_and(|k| k.is_file()) && has_ext(&e.path(), &["nmo"]))
+            .count()
+    })
+}
+
+/// The documents counted as a map's readme: a text file, or a document named as a readme or as the map.
+const DOCS: [&str; 10] = ["txt", "md", "nfo", "rtf", "doc", "docx", "odt", "pdf", "htm", "html"];
+const README_NAMES: [&str; 12] = [
+    "readme", "read me", "read_me", "read-me", "说明", "自述", "介绍", "liesmich", "lisezmoi", "leeme", "прочти",
+    "описание",
+];
+
+/// Whether `name` (a file beside a map whose file is named `stem`) is a readme: any .txt, .md or .nfo but a level's
+/// own level.txt, or a document (.doc, .pdf...) named as a readme or as the map.
+fn is_readme(name: &str, stem: &str) -> bool {
+    let lower = name.to_lowercase();
+    let Some((base, ext)) = lower.rsplit_once('.') else {
+        return false;
+    };
+    if !DOCS.contains(&ext) || lower == "level.txt" || base.is_empty() {
+        return false;
+    }
+    matches!(ext, "txt" | "md" | "nfo") || README_NAMES.iter().any(|r| base.contains(r)) || base == stem.to_lowercase()
+}
+
+/// Whether a plain file beside the map `file` is a readme.
+fn has_readme(file: &Path) -> bool {
+    let (Some(dir), Some(stem)) = (file.parent(), file.file_stem()) else {
+        return false;
+    };
+    let stem = stem.to_string_lossy();
+    folder_has_readme(dir, &stem)
+}
+
+fn folder_has_readme(dir: &Path, stem: &str) -> bool {
+    let Ok(read) = std::fs::read_dir(dir) else {
+        return false;
+    };
+    read.flatten()
+        .take(4096)
+        .filter(|e| e.file_type().is_ok_and(|k| k.is_file()))
+        .any(|e| is_readme(&e.file_name().to_string_lossy(), stem))
 }
 
 /// How often a map tries the next numbered name when the disk has its name in another form.
@@ -163,7 +288,7 @@ enum Written {
 
 /// A name safe to print on a terminal: control and invisible format characters (escape sequences, direction
 /// overrides) shown as `\u{..}` escapes.
-fn printable(s: &str) -> String {
+pub(crate) fn printable(s: &str) -> String {
     s.chars()
         .map(|c| {
             if c.is_control() || is_format(c) {
@@ -182,11 +307,15 @@ fn shown(p: &Path) -> String {
 /// One line saying what an import did.
 pub fn summary_line(s: &Summary, to: &Path) -> String {
     format!(
-        "{} levels made in {}; {} the same as another, {} archives not opened, {} links not followed, {} failed",
+        "{} levels made in {} ({} from the catalogue, {} for a readme); {} the same as another, {} set aside ({} packed archives, {} not in the catalogue and without a readme), {} links not followed, {} failed",
         s.imported,
         shown(to),
+        s.catalogued,
+        s.readme_only,
         s.duplicates.len(),
-        s.archives.len(),
+        s.set_aside.len(),
+        s.set_aside.iter().filter(|(_, r)| *r == Reason::Archive).count(),
+        s.set_aside.iter().filter(|(_, r)| *r == Reason::Uncatalogued).count(),
         s.links.len(),
         s.failed.len()
     )
@@ -308,7 +437,7 @@ fn strip_maps(c: &str) -> String {
 
 /// Text without control, format and direction characters, spaces made one, trimmed, at most `max` characters (a cut
 /// one at a word, ending in "…"): as the game cleans what it shows.
-fn clean(s: &str, max: usize) -> String {
+pub(crate) fn clean(s: &str, max: usize) -> String {
     let mut out = String::new();
     let mut space = false;
     for c in s.chars() {
@@ -471,11 +600,12 @@ fn write_named(
     rel: &Path,
     bytes: &[u8],
     file: &Path,
+    lines: &[String],
 ) -> Result<String, Written> {
     let mut outcome = Err(Written::Exists);
     for _ in 0..NAME_TRIES {
         let name = unique(title, taken);
-        outcome = write_level(to, &name, title, rel, bytes, file).map(|()| name);
+        outcome = write_level(to, &name, title, rel, bytes, file, lines).map(|()| name);
         if !matches!(outcome, Err(Written::Exists)) {
             break;
         }
@@ -485,12 +615,20 @@ fn write_named(
 
 /// Writes the level folder `to/name`: the map, its preview, level.txt; into a hidden folder first, renamed into
 /// place when complete.
-fn write_level(to: &Path, name: &str, title: &str, rel: &Path, bytes: &[u8], file: &Path) -> Result<(), Written> {
+fn write_level(
+    to: &Path,
+    name: &str,
+    title: &str,
+    rel: &Path,
+    bytes: &[u8],
+    file: &Path,
+    lines: &[String],
+) -> Result<(), Written> {
     // a name the disk has in another case or Unicode form is found here (case-insensitive and normalising systems)
     if std::fs::symlink_metadata(to.join(name)).is_ok() {
         return Err(Written::Exists);
     }
-    write_level_files(to, name, title, rel, bytes, file).map_err(|e| {
+    write_level_files(to, name, title, rel, bytes, file, lines).map_err(|e| {
         if std::fs::symlink_metadata(to.join(name)).is_ok() {
             Written::Exists
         } else {
@@ -499,7 +637,18 @@ fn write_level(to: &Path, name: &str, title: &str, rel: &Path, bytes: &[u8], fil
     })
 }
 
-fn write_level_files(to: &Path, name: &str, title: &str, rel: &Path, bytes: &[u8], file: &Path) -> Result<(), String> {
+/// The comment level.txt starts with.
+const INFO_HEADER: &str = "# Shown in the game's list of levels; edit as you like.";
+
+fn write_level_files(
+    to: &Path,
+    name: &str,
+    title: &str,
+    rel: &Path,
+    bytes: &[u8],
+    file: &Path,
+    lines: &[String],
+) -> Result<(), String> {
     let fail = |p: &Path, e: std::io::Error| format!("{}: {e}", p.display());
     let tmp = to.join(format!(".import-{}-{}", std::process::id(), fnv1a(name.as_bytes())));
     if std::fs::symlink_metadata(&tmp).is_ok() {
@@ -528,12 +677,19 @@ fn write_level_files(to: &Path, name: &str, title: &str, rel: &Path, bytes: &[u8
                 write_new(&tmp.join(format!("preview.{ext}")), &b)?;
             }
         }
-        let mut info = String::from("# Shown in the game's list of levels; edit as you like.\n");
-        // the whole title (the game shows its first TITLE_MAX characters) when the folder's name had to change
-        // characters; a numbered folder (a second "Hello Mars") keeps its number on screen instead
-        let numbered = name != folder_name(title);
-        if !numbered && clean(title, TITLE_MAX) != name {
-            info.push_str(&format!("title = {}\n", clean(title, 200)));
+        let mut info = format!("{INFO_HEADER}\n");
+        if lines.is_empty() {
+            // the whole title (the game shows its first TITLE_MAX characters) when the folder's name had to change
+            // characters; a numbered folder (a second "Hello Mars") keeps its number on screen instead
+            let numbered = name != folder_name(title);
+            if !numbered && clean(title, TITLE_MAX) != name {
+                info.push_str(&format!("title = {}\n", clean(title, 200)));
+            }
+        }
+        // the catalogue's title, Chinese title, author and difficulty
+        for l in lines {
+            info.push_str(l);
+            info.push('\n');
         }
         let source = clean(&rel.to_string_lossy(), 400);
         info.push_str(&format!("source = {source}\n"));
@@ -634,12 +790,294 @@ fn fnv1a(bytes: &[u8]) -> u64 {
     gamedata::fnv1a(bytes)
 }
 
+/// What a refresh did.
+#[derive(Debug, Default)]
+pub struct Refreshed {
+    /// Level folders looked at.
+    pub levels: usize,
+    /// Found in the catalogue (level.txt written from it), and of those, level.txt changed.
+    pub catalogued: usize,
+    pub rewritten: usize,
+    /// Kept for a readme (in the level's folder or beside its source) alone.
+    pub readme_only: usize,
+    /// Kept because their source could not be looked at for a readme (no `source =`, no source folder given, gone).
+    pub unverified: Vec<String>,
+    /// Moved into the unsorted folder: (name there, why).
+    pub set_aside: Vec<(String, Reason)>,
+    /// Links and other entries left alone.
+    pub left: Vec<String>,
+    pub failed: Vec<String>,
+}
+
+/// Brings a folder of levels already imported (`levels/community`) up to the catalogue, in place: each level's
+/// level.txt gets the catalogue's title, Chinese title, author and difficulty (its other lines, `source =` among them,
+/// kept); a folder that is not one level, or whose map is neither in the catalogue nor has a readme (in its folder or
+/// beside its source in `source_root`, the collection its `source =` line names a path in), is moved into `unsorted`.
+/// Nothing is deleted; only level.txt files are written.
+pub fn refresh(
+    dir: &Path,
+    catalogue: &Catalogue,
+    source_root: Option<&Path>,
+    unsorted: &Path,
+    tell: &mut dyn FnMut(String),
+    stop: &std::sync::atomic::AtomicBool,
+) -> Result<Refreshed, String> {
+    let meta = std::fs::symlink_metadata(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    if meta.file_type().is_symlink() || !meta.is_dir() {
+        return Err(format!("{}: not a folder (a link is not followed)", dir.display()));
+    }
+    let levels = canonical(dir)?;
+    let aside = canonical_to_be(unsorted);
+    if aside.starts_with(&levels) || levels.starts_with(&aside) {
+        return Err(format!(
+            "{}: the unsorted folder must be beside, not inside, {}",
+            unsorted.display(),
+            dir.display()
+        ));
+    }
+    let source_root = source_root.map(canonical).transpose()?;
+    let mut entries: Vec<std::fs::DirEntry> = std::fs::read_dir(&levels)
+        .map_err(|e| format!("{}: {e}", dir.display()))?
+        .flatten()
+        .take(ENTRIES_MAX)
+        .collect();
+    entries.sort_by_key(std::fs::DirEntry::file_name);
+    let mut r = Refreshed::default();
+    let mut u = Unsorted::new(unsorted);
+    for e in entries {
+        if stop.load(std::sync::atomic::Ordering::Relaxed) {
+            let _ = u.finish();
+            return Err(format!("stopped after {} levels", r.levels));
+        }
+        let name = e.file_name().to_string_lossy().into_owned();
+        let shown_name = printable(&name);
+        let Ok(kind) = e.file_type() else { continue };
+        if name.starts_with('.') || kind.is_file() {
+            continue;
+        }
+        if !kind.is_dir() {
+            r.left.push(format!("{name}: a link, left alone"));
+            continue;
+        }
+        let path = e.path();
+        r.levels += 1;
+        let look = look_at_level(&path);
+        // only a folder the toolbox made (its level.txt names a source) is ever moved: a folder given by mistake
+        // (a download, a home folder) loses nothing
+        let made = gamedata::package::read_small(&path.join("level.txt"), gamedata::package::INFO_MAX)
+            .is_some_and(|b| source_of(&String::from_utf8_lossy(&b)).is_some());
+        if !made {
+            r.left.push(format!("{shown_name}: no level.txt with a source = line (not made by import-maps), left alone"));
+            continue;
+        }
+        if !look.one_level {
+            match u.move_dir(&path, Reason::NotOneLevel) {
+                Ok(n) => tell(format!("set aside (not a single level): {shown_name} -> {}", printable(&n))),
+                Err(e) => r.failed.push(e),
+            }
+            continue;
+        }
+        let info_path = path.join("level.txt");
+        let info = gamedata::package::read_small(&info_path, gamedata::package::INFO_MAX);
+        let text = info.as_deref().map(String::from_utf8_lossy).unwrap_or_default().into_owned();
+        let source = source_of(&text);
+        let source_file = source
+            .as_deref()
+            .and_then(safe_rel)
+            .zip(source_root.as_deref())
+            .map(|(rel, root)| root.join(rel));
+        let mut names: Vec<String> = Vec::new();
+        if let Some(rel) = source.as_deref().and_then(safe_rel) {
+            names.extend(rel.file_stem().map(|n| n.to_string_lossy().into_owned()));
+        }
+        names.push(name.clone());
+        // as an import: the source's folder's name when that folder holds this one map
+        if let (Some(file), Some(root)) = (&source_file, &source_root)
+            && let Some(dir) = file.parent().filter(|d| d != root)
+            && maps_in(dir) == 1
+        {
+            names.extend(dir.file_name().map(|n| n.to_string_lossy().into_owned()));
+        }
+        let refs: Vec<&str> = names.iter().map(String::as_str).collect();
+        if let Some(found) = catalogue.find(&refs) {
+            r.catalogued += 1;
+            if info.is_some() || std::fs::symlink_metadata(&info_path).is_err() {
+                let new = merged_info(&text, &found.lines());
+                if new != text {
+                    match replace_file(&path, "level.txt", new.as_bytes()) {
+                        Ok(()) => {
+                            r.rewritten += 1;
+                            tell(format!("{shown_name}: {}", printable(found.title())));
+                        }
+                        Err(e) => r.failed.push(e),
+                    }
+                }
+            } else {
+                r.failed.push(format!("{}: not a plain file of at most 4 KiB, left as it is", info_path.display()));
+            }
+            continue;
+        }
+        if look.readme || source_file.as_deref().is_some_and(has_readme) {
+            r.readme_only += 1;
+            continue;
+        }
+        let checked = source_file.as_deref().is_some_and(|f| {
+            std::fs::symlink_metadata(f).is_ok_and(|m| m.is_file())
+                && f.parent().is_some_and(|d| std::fs::read_dir(d).is_ok())
+        });
+        if !checked {
+            tell(format!("kept (its source could not be looked at for a readme): {shown_name}"));
+            r.unverified.push(name);
+            continue;
+        }
+        match u.move_dir(&path, Reason::Uncatalogued) {
+            Ok(n) => tell(format!("set aside (not in the catalogue, no readme): {shown_name} -> {}", printable(&n))),
+            Err(e) => r.failed.push(e),
+        }
+    }
+    if let Err(e) = u.finish() {
+        r.failed.push(e);
+    }
+    r.set_aside = u.items().to_vec();
+    Ok(r)
+}
+
+/// One line saying what a refresh did.
+pub fn refresh_line(r: &Refreshed, unsorted: &Path) -> String {
+    let count = |want: Reason| r.set_aside.iter().filter(|(_, w)| *w == want).count();
+    format!(
+        "{} levels: {} in the catalogue ({} level.txt written), {} kept for a readme, {} kept unverified; set aside into {}: {} not in the catalogue and without a readme, {} not a single level; {} left alone, {} failed",
+        r.levels,
+        r.catalogued,
+        r.rewritten,
+        r.readme_only,
+        r.unverified.len(),
+        shown(unsorted),
+        count(Reason::Uncatalogued),
+        count(Reason::NotOneLevel),
+        r.left.len(),
+        r.failed.len()
+    )
+}
+
+/// What a level folder holds: whether it is one level as the game lists it (one `.nmo`, or the open format's
+/// level.gltf, not both), and whether a readme lies in it.
+struct Look {
+    one_level: bool,
+    readme: bool,
+}
+
+fn look_at_level(dir: &Path) -> Look {
+    let Ok(read) = std::fs::read_dir(dir) else {
+        return Look { one_level: false, readme: false };
+    };
+    let (mut nmo, mut gltf, mut readme) = (0usize, false, false);
+    for e in read.flatten().take(4096) {
+        if !e.file_type().is_ok_and(|k| k.is_file()) {
+            continue;
+        }
+        let n = e.file_name().to_string_lossy().into_owned();
+        if has_ext(Path::new(&n), &["nmo"]) {
+            nmo += 1;
+        } else if n.eq_ignore_ascii_case("level.gltf") {
+            gltf = true;
+        } else if is_readme(&n, "") {
+            readme = true;
+        }
+    }
+    Look {
+        one_level: (nmo == 1) != gltf && nmo <= 1,
+        readme,
+    }
+}
+
+/// The value of level.txt's first `source =` line.
+fn source_of(text: &str) -> Option<String> {
+    text.lines().take(64).find_map(|l| {
+        let (k, v) = l.split_once('=')?;
+        (k.trim().eq_ignore_ascii_case("source")).then(|| v.trim().to_owned()).filter(|v| !v.is_empty())
+    })
+}
+
+/// A relative path of plain names only (no root, no "..", no "."), as a `source =` line may name inside the
+/// collection; None for anything else.
+fn safe_rel(s: &str) -> Option<PathBuf> {
+    let p = Path::new(s);
+    let mut out = PathBuf::new();
+    for c in p.components() {
+        match c {
+            std::path::Component::Normal(n) => out.push(n),
+            _ => return None,
+        }
+    }
+    (!out.as_os_str().is_empty()).then_some(out)
+}
+
+/// level.txt with the catalogue's `lines`: its leading comments (or the toolbox's), the catalogue's lines, then its
+/// other lines but those the catalogue gives, within the game's 64 lines and 4 KiB.
+fn merged_info(old: &str, lines: &[String]) -> String {
+    let old = old.strip_prefix('\u{feff}').unwrap_or(old);
+    let mut head: Vec<&str> = old.lines().take_while(|l| l.trim_start().starts_with('#')).collect();
+    if head.is_empty() {
+        head.push(INFO_HEADER);
+    }
+    let key_of = |l: &str| l.split_once('=').map(|(k, _)| k.trim().to_ascii_lowercase());
+    // a key the catalogue gives replaces the old line; one it has nothing for keeps the player's
+    let given: Vec<String> = lines.iter().filter_map(|l| key_of(l)).collect();
+    let rest: Vec<&str> = old
+        .lines()
+        .skip(head.len())
+        .filter(|l| !l.trim().is_empty() && !key_of(l).is_some_and(|k| given.contains(&k)))
+        .collect();
+    // the source line first among them, so a cut at the game's caps never loses it
+    let (source, others): (Vec<&str>, Vec<&str>) =
+        rest.into_iter().partition(|l| key_of(l).is_some_and(|k| k == "source"));
+    let mut out = String::new();
+    let all = head
+        .into_iter()
+        .map(str::to_owned)
+        .chain(lines.iter().cloned())
+        .chain(source.into_iter().map(str::to_owned))
+        .chain(others.into_iter().map(str::to_owned));
+    for l in all.take(64) {
+        let len = out.len().saturating_add(l.len()).saturating_add(1);
+        if len > usize::try_from(gamedata::package::INFO_MAX).unwrap_or(4096) {
+            break;
+        }
+        out.push_str(&l);
+        out.push('\n');
+    }
+    out
+}
+
+/// Replaces `dir/name` with `bytes`: written beside as a hidden part file and renamed over it (a link there is
+/// replaced, never written through).
+fn replace_file(dir: &Path, name: &str, bytes: &[u8]) -> Result<(), String> {
+    let tmp = dir.join(format!(".{name}.part-{}", std::process::id()));
+    let _ = std::fs::remove_file(&tmp);
+    write_new(&tmp, bytes)?;
+    let dst = dir.join(name);
+    std::fs::rename(&tmp, &dst).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp);
+        format!("{}: {e}", dst.display())
+    })
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 
     static GO: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+    /// Sorting without a catalogue, setting aside beside `dst`.
+    fn plain(dst: &Path) -> Sorting<'static> {
+        let name = dst.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        Sorting {
+            catalogue: None,
+            unsorted: dst.with_file_name(format!("{name}-unsorted")),
+        }
+    }
 
     fn temp(name: &str) -> PathBuf {
         let d = std::env::temp_dir().join(format!("toolbox-import-{name}-{}", std::process::id()));
@@ -701,7 +1139,7 @@ mod tests {
         std::fs::create_dir_all(dst.join("Map")).unwrap();
         let mut taken = HashSet::new();
         assert!(matches!(
-            write_level(&dst, "Map", "Map", Path::new("Map.nmo"), b"m", &src.join("Map.nmo")),
+            write_level(&dst, "Map", "Map", Path::new("Map.nmo"), b"m", &src.join("Map.nmo"), &[]),
             Err(Written::Exists)
         ));
         let name = write_named(
@@ -711,6 +1149,7 @@ mod tests {
             Path::new("Map.nmo"),
             b"m",
             &src.join("Map.nmo"),
+            &[],
         )
         .unwrap();
         assert_eq!(name, "Map (2)");
@@ -730,7 +1169,7 @@ mod tests {
         std::fs::write(src.join("open.nmo"), b"o").unwrap();
         std::fs::set_permissions(src.join("locked"), std::fs::Permissions::from_mode(0o000)).unwrap();
         let readable = std::fs::read_dir(src.join("locked")).is_ok(); // root reads it anyway
-        let s = import(&src, &dst, &mut |_| {}, &GO);
+        let s = import(&src, &dst, &plain(&dst), &mut |_| {}, &GO);
         std::fs::set_permissions(src.join("locked"), std::fs::Permissions::from_mode(0o755)).unwrap();
         let s = s.unwrap();
         if !readable {
@@ -784,7 +1223,7 @@ mod tests {
         mk("CON.nmo", b"con");
         mk("Odd: name?.nmo", b"odd");
         let mut lines = Vec::new();
-        let s = import(&src, &dst, &mut |l| lines.push(l), &GO).unwrap();
+        let s = import(&src, &dst, &plain(&dst), &mut |l| lines.push(l), &GO).unwrap();
         assert_eq!(s.imported, 7, "{lines:?}");
         let odd = std::fs::read_to_string(dst.join("Odd name/level.txt")).unwrap();
         assert!(odd.contains("title = Odd: name?\n"), "{odd}");
@@ -815,7 +1254,7 @@ mod tests {
         assert!(!info.contains("title") && info.contains("source = Other"), "{info}");
         // the source is untouched, and a second run makes new names beside the first
         assert!(src.join("Custom Maps/Hello Mars.NMO").exists());
-        let again = import(&src, &dst, &mut |_| {}, &GO).unwrap();
+        let again = import(&src, &dst, &plain(&dst), &mut |_| {}, &GO).unwrap();
         assert_eq!((again.imported, again.duplicates.len()), (0, 8));
         assert!(dst.join("CON_/CON_.nmo").exists());
         // no hidden work folder is left
@@ -832,7 +1271,7 @@ mod tests {
     #[test]
     fn nested_folders_are_refused() {
         let src = temp("nest");
-        assert!(import(&src, &src.join("out"), &mut |_| {}, &GO).is_err());
+        assert!(import(&src, &src.join("out"), &plain(&src.join("out")), &mut |_| {}, &GO).is_err());
         assert!(!src.join("out").exists(), "nothing is made in the source");
         let _ = std::fs::remove_dir_all(&src);
     }
@@ -850,10 +1289,191 @@ mod tests {
         symlink(outside.join("secret.nmo"), src.join("linked.nmo")).unwrap();
         symlink(outside.join("dir"), src.join("linked dir")).unwrap();
         std::fs::write(src.join("real.nmo"), b"r").unwrap();
-        let s = import(&src, &dst, &mut |_| {}, &GO).unwrap();
+        let s = import(&src, &dst, &plain(&dst), &mut |_| {}, &GO).unwrap();
         assert_eq!((s.imported, s.links.len()), (1, 2));
         let _ = std::fs::remove_dir_all(&src);
         let _ = std::fs::remove_dir_all(&dst);
         let _ = std::fs::remove_dir_all(&outside);
+    }
+
+    const TABLE: &str = "| Posted | IDs | Original Name | English Name | Author | Difficulty | Type | Videos |\n\
+|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|\n\
+| 2009 | 1 | 天马行空 | Pie in the Sky | 失衡技师 | 3 | C |  |\n\
+| 2020 | 2 | Hello Mars | Hello Mars | someone | 2.5–3 | C |  |\n\
+| 2022 | 3 | 璀璨星河 | Bright Galaxy | 其乐融融 |  | C |  |\n";
+
+    #[test]
+    fn readmes_are_told() {
+        assert!(is_readme("README.txt", "x"));
+        assert!(is_readme("notes.TXT", "x"));
+        assert!(is_readme("地图说明.doc", "x"));
+        assert!(is_readme("Map.pdf", "map"));
+        assert!(is_readme("ReadMe.docx", "x"));
+        assert!(!is_readme("level.txt", "x"));
+        assert!(!is_readme("评分标准.doc", "x"));
+        assert!(!is_readme("readme", "x"));
+        assert!(!is_readme("readme.exe", "x"));
+        assert!(!is_readme(".txt", "x"));
+        assert!(!is_readme("Map.jpg", "map"));
+    }
+
+    #[test]
+    fn with_a_catalogue_what_does_not_fit_is_set_aside() {
+        let src = temp("cat-src");
+        let base = temp("cat-base");
+        let dst = base.join("community");
+        let aside = base.join("community-unsorted");
+        let mk = |p: &str, b: &[u8]| {
+            let p = src.join(p);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(p, b).unwrap();
+        };
+        mk("Custom Maps/Pie in the Sky.NMO", b"pie");
+        mk("Custom Maps/Bright Galaxy v1.2.NMO", b"bright");
+        mk("Custom Maps/Nobody Knows.NMO", b"nobody");
+        mk("Custom Maps/Nobody Knows.jpg", b"jpg");
+        mk("Custom Maps/Packed.zip", b"zip");
+        mk("Season/天马行空/W3.NMO", b"w3");
+        mk("Readme Map/Mine.NMO", b"mine");
+        mk("Readme Map/README.txt", b"hi");
+        let c = crate::catalogue::parse(TABLE);
+        let sorting = Sorting {
+            catalogue: Some(&c),
+            unsorted: aside.clone(),
+        };
+        let mut lines = Vec::new();
+        let s = import(&src, &dst, &sorting, &mut |l| lines.push(l), &GO).unwrap();
+        assert_eq!((s.imported, s.catalogued, s.readme_only), (4, 3, 1), "{lines:?}");
+        let pie = std::fs::read_to_string(dst.join("Pie in the Sky/level.txt")).unwrap();
+        assert_eq!(
+            pie,
+            "# Shown in the game's list of levels; edit as you like.\ntitle = Pie in the Sky\ntitle.zh = 天马行空\n\
+             author = 失衡技师\ndifficulty = 6\nsource = Custom Maps/Pie in the Sky.NMO\n"
+        );
+        // named after the catalogue's title; matched by the version-less name and by its folder's name
+        let bright = std::fs::read_to_string(dst.join("Bright Galaxy/level.txt")).unwrap();
+        assert!(bright.contains("title.zh = 璀璨星河\n") && !bright.contains("difficulty"), "{bright}");
+        assert!(dst.join("Pie in the Sky (2)/W3.NMO").exists());
+        let mine = std::fs::read_to_string(dst.join("Mine/level.txt")).unwrap();
+        assert!(!mine.contains("title") && !mine.contains("difficulty"), "{mine}");
+        // copied aside, keeping the source's names; the source untouched
+        assert_eq!(std::fs::read(aside.join("Custom Maps/Nobody Knows.NMO")).unwrap(), b"nobody");
+        assert_eq!(std::fs::read(aside.join("Custom Maps/Packed.zip")).unwrap(), b"zip");
+        assert!(src.join("Custom Maps/Nobody Knows.NMO").exists() && src.join("Custom Maps/Packed.zip").exists());
+        assert!(!dst.join("Nobody Knows").exists());
+        let readme = std::fs::read_to_string(aside.join("README.txt")).unwrap();
+        assert!(readme.contains("Custom Maps/Nobody Knows.NMO  —  not in the catalogue"), "{readme}");
+        assert!(readme.contains("Custom Maps/Packed.zip  —  packed archive"), "{readme}");
+        assert_eq!(s.set_aside.len(), 2);
+        // without a catalogue every map is imported; archives are still set aside
+        let base2 = temp("cat-base2");
+        let s = import(&src, &base2.join("c"), &plain(&base2.join("c")), &mut |_| {}, &GO).unwrap();
+        assert_eq!((s.imported, s.set_aside.len()), (5, 1));
+        // the unsorted folder inside the levels or the source is refused
+        let inside = Sorting { catalogue: None, unsorted: dst.join("u") };
+        assert!(import(&src, &dst, &inside, &mut |_| {}, &GO).is_err());
+        let inside = Sorting { catalogue: None, unsorted: src.join("u") };
+        assert!(import(&src, &dst, &inside, &mut |_| {}, &GO).is_err());
+        assert!(!src.join("u").exists());
+        let _ = std::fs::remove_dir_all(&src);
+        let _ = std::fs::remove_dir_all(&base);
+        let _ = std::fs::remove_dir_all(&base2);
+    }
+
+    #[test]
+    fn a_refresh_rewrites_level_txt_and_moves_what_does_not_fit() {
+        let src = temp("ref-src");
+        let base = temp("ref-base");
+        let levels = base.join("community");
+        let aside = base.join("community-unsorted");
+        let mk = |root: &Path, p: &str, b: &[u8]| {
+            let p = root.join(p);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(p, b).unwrap();
+        };
+        let header = "# Shown in the game's list of levels; edit as you like.\n";
+        mk(&src, "Custom Maps/Pie in the Sky.NMO", b"pie");
+        mk(&src, "Custom Maps/Nobody.NMO", b"n");
+        mk(&src, "Docs/Mine.NMO", b"m");
+        mk(&src, "Docs/readme.txt", b"r");
+        mk(&src, "Season/天马行空/W3.NMO", b"w");
+        mk(&levels, "Pie in the Sky/Pie in the Sky.NMO", b"pie");
+        mk(
+            &levels,
+            "Pie in the Sky/level.txt",
+            format!("{header}title = Old\nversion = 2\nsource = Custom Maps/Pie in the Sky.NMO\n").as_bytes(),
+        );
+        mk(&levels, "W3/W3.NMO", b"w");
+        mk(&levels, "W3/level.txt", format!("{header}source = Season/天马行空/W3.NMO\n").as_bytes());
+        mk(&levels, "Nobody/Nobody.NMO", b"n");
+        mk(&levels, "Nobody/level.txt", format!("{header}source = Custom Maps/Nobody.NMO\n").as_bytes());
+        mk(&levels, "Mine/Mine.NMO", b"m");
+        mk(&levels, "Mine/level.txt", format!("{header}source = Docs/Mine.NMO\n").as_bytes());
+        mk(&levels, "Own Readme/x.nmo", b"x");
+        mk(&levels, "Own Readme/README.txt", b"r");
+        mk(&levels, "Own Readme/level.txt", format!("{header}source = Elsewhere/x.nmo\n").as_bytes());
+        mk(&levels, "Lost/Lost.NMO", b"l");
+        mk(&levels, "Lost/level.txt", format!("{header}source = Custom Maps/Gone.NMO\n").as_bytes());
+        mk(&levels, "Escape/E.NMO", b"e");
+        mk(&levels, "Escape/level.txt", format!("{header}source = ../../etc/passwd\n").as_bytes());
+        mk(&levels, "Two/a.nmo", b"a");
+        mk(&levels, "Two/b.nmo", b"b");
+        mk(&levels, "Two/level.txt", format!("{header}source = Two/a.nmo\n").as_bytes());
+        mk(&levels, "Not Mine/a.nmo", b"a");
+        mk(&levels, "Not Mine/b.nmo", b"b");
+        std::fs::create_dir_all(levels.join("Empty")).unwrap();
+        mk(&levels, "README.txt", b"the game's");
+        let c = crate::catalogue::parse(TABLE);
+        let mut lines = Vec::new();
+        let r = refresh(&levels, &c, Some(&src), &aside, &mut |l| lines.push(l), &GO).unwrap();
+        assert_eq!(
+            (r.levels, r.catalogued, r.rewritten, r.readme_only, r.unverified.len(), r.set_aside.len()),
+            (10, 2, 2, 2, 2, 2),
+            "{lines:?} {r:?}"
+        );
+        assert_eq!(
+            std::fs::read_to_string(levels.join("Pie in the Sky/level.txt")).unwrap(),
+            format!(
+                "{header}title = Pie in the Sky\ntitle.zh = 天马行空\nauthor = 失衡技师\ndifficulty = 6\n\
+                 source = Custom Maps/Pie in the Sky.NMO\nversion = 2\n"
+            )
+        );
+        assert!(std::fs::read_to_string(levels.join("W3/level.txt")).unwrap().contains("title = Pie in the Sky\n"));
+        // moved, never deleted; the maps kept where they were
+        assert_eq!(std::fs::read(aside.join("Nobody/Nobody.NMO")).unwrap(), b"n");
+        assert!(aside.join("Two/a.nmo").exists());
+        // folders the toolbox did not make are left alone, whatever they hold
+        assert!(levels.join("Empty").is_dir() && levels.join("Not Mine/a.nmo").exists());
+        assert_eq!(r.left.len(), 2, "{:?}", r.left);
+        for kept in ["Mine", "Own Readme", "Lost", "Escape", "Pie in the Sky", "W3"] {
+            assert!(levels.join(kept).is_dir(), "{kept}");
+        }
+        assert!(levels.join("README.txt").is_file() && src.join("Custom Maps/Nobody.NMO").exists());
+        // a second run changes nothing
+        let again = refresh(&levels, &c, Some(&src), &aside, &mut |_| {}, &GO).unwrap();
+        assert_eq!((again.rewritten, again.set_aside.len()), (0, 0));
+        let readme = std::fs::read_to_string(aside.join("README.txt")).unwrap();
+        assert_eq!(readme.matches("\n- ").count(), 2, "{readme}");
+        // without the source collection nothing can be checked for a readme: nothing more is moved
+        assert!(refresh(&levels, &c, None, &aside, &mut |_| {}, &GO).unwrap().set_aside.is_empty());
+        // the unsorted folder inside the levels is refused
+        assert!(refresh(&levels, &c, Some(&src), &levels.join("u"), &mut |_| {}, &GO).is_err());
+        let _ = std::fs::remove_dir_all(&src);
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn merged_level_txt_stays_in_the_game_s_caps() {
+        let old = format!("# c\n# d\ntitle = x\nAuthor = y\n{}source = s\n", "k = v\n".repeat(200));
+        let m = merged_info(&old, &["title = T".into(), "difficulty = 3".into()]);
+        // the player's author kept (the catalogue gives none here); the source kept ahead of the cut
+        assert!(m.starts_with("# c\n# d\ntitle = T\ndifficulty = 3\nsource = s\nAuthor = y\n"), "{m}");
+        assert!(m.lines().count() <= 64 && m.len() <= 4096);
+        assert_eq!(merged_info("", &["title = T".into()]), format!("{INFO_HEADER}\ntitle = T\n"));
+        assert_eq!(safe_rel("a/b.nmo"), Some(PathBuf::from("a/b.nmo")));
+        for bad in ["", "/etc/passwd", "../x", "a/../../x", "./a"] {
+            assert_eq!(safe_rel(bad), None, "{bad}");
+        }
+        assert_eq!(source_of("# x\nSource = A/B.NMO\nsource = other\n").as_deref(), Some("A/B.NMO"));
     }
 }

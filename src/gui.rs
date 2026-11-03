@@ -160,7 +160,7 @@ impl App {
     fn new(data_dir: Option<PathBuf>) -> App {
         let data = gamedata::assets::Data::locate(data_dir)
             .ok()
-            .map(|d| d.root);
+            .and_then(|d| d.root);
         let models = remaster::models();
         // the model and the scale chosen last time, when they are still there
         let (kept_model, kept_scale) = remembered();
@@ -202,7 +202,7 @@ impl App {
         let (scale, model, relief) = (self.scale, self.model.clone(), self.relief);
         remember(&model, scale);
         std::thread::spawn(move || {
-            let data = gamedata::assets::Data { root, overlay: None };
+            let data = gamedata::assets::Data::new(Some(root));
             let out = gamedata::profile::dir(gamedata::profile::Kind::Remastered);
             let tell = send.clone();
             let repaint = ctx2.clone();
@@ -251,7 +251,8 @@ impl App {
                 let _ = tell.send(Ok(Progress::Line(l)));
                 repaint.request_repaint();
             };
-            let result = crate::import::import(&from, &to, &mut line, &stop);
+            let sorting = crate::import::Sorting { catalogue: None, unsorted: crate::import::default_unsorted(&to) };
+            let result = crate::import::import(&from, &to, &sorting, &mut line, &stop);
             if let Ok(s) = &result {
                 let _ = send.send(Ok(Progress::Line(crate::import::summary_line(s, &to))));
             }
@@ -365,7 +366,7 @@ impl eframe::App for App {
                             let typed = PathBuf::from(self.data_field.trim());
                             self.data = gamedata::assets::Data::locate(Some(typed.clone()))
                                 .ok()
-                                .map(|d| d.root)
+                                .and_then(|d| d.root)
                                 .filter(|root| *root == typed);
                         }
                     });

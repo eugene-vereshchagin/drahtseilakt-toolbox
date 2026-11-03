@@ -8,6 +8,7 @@
 // and image code reads better with plain arithmetic and indexing of fixed-size arrays.
 #![allow(clippy::arithmetic_side_effects, clippy::indexing_slicing)]
 
+mod catalogue;
 mod gui;
 mod import;
 mod masonry;
@@ -15,6 +16,7 @@ mod normals;
 mod remaster;
 mod smooth;
 mod texts;
+mod unsorted;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -35,7 +37,16 @@ commands:
   import-maps DIR     sort a downloaded collection of community maps (an unpacked archive, folders of any depth)
                       into the game's levels/community: one folder per map with its .nmo, its preview picture
                       and a level.txt with its title; the same map twice becomes one level; packed archives are
-                      named, not opened; DIR is only read. --to DIR imports elsewhere
+                      copied into the unsorted folder, not opened; DIR is only read. --to DIR imports elsewhere.
+                      With --catalogue FILE each map found in it gets its English title, Chinese title, author
+                      and difficulty, and a map neither in it nor with a readme beside it is copied into the
+                      unsorted folder instead
+  import-maps --refresh DIR --catalogue FILE [--source DIR]
+                      bring a levels folder imported before (levels/community) up to the catalogue in place:
+                      level.txt files rewritten from it; level folders that are not one level, or whose map is
+                      neither in the catalogue nor has a readme (in the folder, or beside its source in the
+                      collection --source DIR, which level.txt's source = line names a path in), moved into the
+                      unsorted folder. Nothing is deleted
 
 options:
   --scale N           make the textures N times larger (2 to 32, default 4; 1 leaves them as they are). With
@@ -47,6 +58,11 @@ options:
   --relief S          give lit textures normal maps of strength S (0 to 20, default 0: none); the relief is
                       guessed from the picture, so every crack and gap is deepened: keep it low (1 to 3)
   --to DIR            with import-maps: the folder to make the levels in (default the game's levels/community)
+  --catalogue FILE    with import-maps: the community's catalogue (CustomMapList.md of BallanceCustomMaps)
+  --unsorted DIR      with import-maps: where what does not fit is set aside, with a README.txt saying why
+                      (default community-unsorted beside the levels folder)
+  --source DIR        with import-maps --refresh: the collection the levels were imported from
+  --refresh DIR       see import-maps
   --data DIR          the Ballance folder (default: $OPENBALLANCE_DATA, then the copy the game imported)
   -h, --help          this text
 ";
@@ -61,6 +77,10 @@ struct Options {
     folder: Option<PathBuf>,
     /// Where import-maps makes its levels.
     to: Option<PathBuf>,
+    catalogue: Option<PathBuf>,
+    unsorted: Option<PathBuf>,
+    source: Option<PathBuf>,
+    refresh: Option<PathBuf>,
 }
 
 fn options(args: impl Iterator<Item = String>) -> Result<Options, String> {
@@ -72,6 +92,10 @@ fn options(args: impl Iterator<Item = String>) -> Result<Options, String> {
         data: None,
         folder: None,
         to: None,
+        catalogue: None,
+        unsorted: None,
+        source: None,
+        refresh: None,
     };
     let mut args = args;
     while let Some(a) = args.next() {
@@ -85,6 +109,10 @@ fn options(args: impl Iterator<Item = String>) -> Result<Options, String> {
             }
             "--data" => o.data = Some(value()?.into()),
             "--to" => o.to = Some(value()?.into()),
+            "--catalogue" => o.catalogue = Some(value()?.into()),
+            "--unsorted" => o.unsorted = Some(value()?.into()),
+            "--source" => o.source = Some(value()?.into()),
+            "--refresh" => o.refresh = Some(value()?.into()),
             "--model" => o.model = value()?,
             "--relief" => {
                 let r: f32 = value()?.parse().map_err(|_| "--relief needs a number (0 to 20)".to_owned())?;
@@ -124,10 +152,28 @@ fn main() -> ExitCode {
                 Ok(())
             }
             Some("import-maps") => {
+                let catalogue = o.catalogue.as_deref().map(catalogue::read).transpose()?;
+                if let Some(c) = &catalogue {
+                    println!("catalogue: {} maps ({} rows skipped as malformed)", c.entries.len(), c.skipped);
+                }
+                let never = std::sync::atomic::AtomicBool::new(false);
+                if let Some(dir) = o.refresh {
+                    let c = catalogue.as_ref().ok_or("import-maps --refresh needs --catalogue FILE")?;
+                    let unsorted = o.unsorted.unwrap_or_else(|| import::default_unsorted(&dir));
+                    let r = import::refresh(&dir, c, o.source.as_deref(), &unsorted, &mut |l| println!("{l}"), &never)?;
+                    for l in r.left.iter().chain(&r.failed) {
+                        println!("{}", import::printable(l));
+                    }
+                    println!("{}", import::refresh_line(&r, &unsorted));
+                    return Ok(());
+                }
                 let from = o.folder.ok_or("import-maps needs the folder of maps")?;
                 let to = o.to.unwrap_or_else(|| gamedata::profile::dir(gamedata::profile::Kind::Community));
-                let never = std::sync::atomic::AtomicBool::new(false);
-                let s = import::import(&from, &to, &mut |l| println!("{l}"), &never)?;
+                let sorting = import::Sorting {
+                    catalogue: catalogue.as_ref(),
+                    unsorted: o.unsorted.unwrap_or_else(|| import::default_unsorted(&to)),
+                };
+                let s = import::import(&from, &to, &sorting, &mut |l| println!("{l}"), &never)?;
                 println!("{}", import::summary_line(&s, &to));
                 Ok(())
             }

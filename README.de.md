@@ -10,7 +10,8 @@ Level-Ordnern liegt; alles Schwere, was Level modern aussehen lässt, lebt hier,
 drahtseilakt-toolbox                     (das Fenster)
 drahtseilakt-toolbox remaster [--scale N] [--model NAME] [--relief S] [--data DIR]
 drahtseilakt-toolbox relief DIR [--scale N] [--relief S]
-drahtseilakt-toolbox import-maps DIR [--to DIR]
+drahtseilakt-toolbox import-maps DIR [--to DIR] [--catalogue FILE] [--unsorted DIR]
+drahtseilakt-toolbox import-maps --refresh DIR --catalogue FILE [--source DIR] [--unsorted DIR]
 ```
 
 Ohne Befehl gestartet öffnet die Toolbox ihr Fenster (Linux X11 oder Wayland, Windows, macOS; Modell und Faktor
@@ -45,7 +46,7 @@ des Spiels, „Ein Level ist ein Ordner“): ein Ordner je Karte mit ihrer `.nmo
 `preview.jpg`/`.png` und einer `level.txt`, die sagt, woher sie kommt (und den ganzen Titel, wenn der Ordnername
 Zeichen verlieren musste). Ein nichtssagender Dateiname (`Level_07.NMO` in „45-Degree Rotated Maps“) wird nach seiner
 Sammlung benannt („45-Degree Rotated - Level 07“); dieselbe Datei zweimal gefunden ist ein Level; gepackte Archive
-(`.tar.gz`, `.zip`...) werden genannt, nicht geöffnet; Namen taugen für Linux, Windows und macOS (keine reservierten
+(`.tar.gz`, `.zip`...) werden nicht geöffnet, sondern beiseitegelegt (unten); Namen taugen für Linux, Windows und macOS (keine reservierten
 Namen, keine Punkte oder Leerzeichen am Ende, höchstens 40 Zeichen, an einer Wortgrenze mit „…“ gekürzt, ein zweites
 „Hello Mars“ wird „Hello Mars (2)“). Links werden nie verfolgt, Tiefe und Anzahl sind begrenzt, die Quelle wird nur
 gelesen, und jedes Level wird in einen versteckten Ordner geschrieben und an seinen Platz umbenannt. Ein zweiter Lauf
@@ -53,6 +54,33 @@ fügt nur Neues hinzu. Das Fenster hat dasselbe als Feld und Import-Knopf.
 Einen Download außerhalb von `levels/community/` entpacken (etwa in Downloads): eine Quelle im Zielordner wird
 abgelehnt. Ein unlesbarer Ordner des Downloads wird übersprungen und genannt; ausgegebene Namen haben ihre
 Steuerzeichen maskiert.
+
+Mit `--catalogue FILE` (dem Katalog der Community, `CustomMapList.md` von
+[BallanceCustomMaps](https://github.com/pseudoacetyl/BallanceCustomMaps)) wird jede Karte nach dem Namen ihrer Datei
+und ihres Ordners gesucht (Groß- und Kleinschreibung, Satzzeichen, Leerzeichen, Zeichen voller Breite und
+„v1.0“/„V1.0“/„1.0“ zählen nicht; eine Versionsnummer, die der Katalog nicht hat, wird ohne sie versucht, nie als andere Version; ein
+Name, den zwei Karten teilen, oder einer unter drei Zeichen trifft nichts; der Name eines Ordners zählt nur für die
+eine Karte darin). Eine gefundene Karte bekommt in ihrer `level.txt` `title =` (den englischen
+Namen), `title.zh =` (den Originalnamen, wenn er ein anderer und chinesisch ist), `author =` und `difficulty =`: die
+Skala des Spiels ist 1–10, darum **wird die 1–5 des Katalogs (mit Halben) verdoppelt** (3.5 wird 7; ein Bereich wie
+2.5–3 nimmt seine Mitte, aufgerundet: 6); hat der Katalog keine, wird keine geschrieben. Mit Katalog wird eine Karte,
+die weder darin steht noch eine Readme neben sich hat (eine `.txt`, `.md` oder `.nfo`, oder ein Dokument, das wie eine
+Readme oder wie die Karte heißt), nicht importiert: wie gepackte Archive wird sie in den **Ordner für Unsortiertes**
+kopiert (`--unsorted DIR`, vorgegeben `community-unsorted` neben dem Level-Ordner), unter ihrem Pfad im Download, und
+eine `README.txt` dort nennt jedes Stück und warum es beiseitegelegt wurde, zum Ansehen von Hand. Eine Karte mit
+Readme, aber nicht im Katalog, wird mit dem Titel aus ihrem Namen und ohne Schwierigkeit importiert. Der Katalog wird
+als fremde Datei gelesen: höchstens 4 MiB, 20 000 Zeilen und 1024 Zeichen je Zelle, kaputte Zeilen übersprungen,
+Werte bereinigt.
+
+`import-maps --refresh DIR --catalogue FILE --source DIR` bringt einen früher importierten Level-Ordner
+(`levels/community`) an Ort und Stelle auf den Stand des Katalogs: die `level.txt` jedes Levels wird aus dem Katalog
+geschrieben (gesucht nach ihrer Zeile `source =` und dem Ordnernamen; ihr Kommentar, ihre Zeile `source =` und andere
+Zeilen bleiben), und ein Level-Ordner, der kein einzelnes Level ist (keine Karte oder mehrere), oder dessen Karte weder
+im Katalog steht noch eine Readme hat (in ihrem Ordner oder neben ihrer Quelle in der Sammlung `--source DIR`, zu der
+die Pfade in `source =` relativ sind), wird in den Ordner für Unsortiertes verschoben (umbenannt auf derselben Platte;
+nichts wird gelöscht). Verschoben werden nur Ordner, die import-maps gemacht hat (eine `level.txt` mit einer Zeile
+`source =`); ein Level, dessen Quelle nicht angesehen werden kann, bleibt. Zeilen, für die der Katalog keinen Wert
+hat (ein eigenes `author =`), bleiben.
 
 Die Toolbox geht nie online und fasst die Originalkopie des Spielers nie an.
 

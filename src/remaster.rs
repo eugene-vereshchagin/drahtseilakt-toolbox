@@ -1080,10 +1080,7 @@ mod tests {
         std::fs::create_dir(&tmp).unwrap();
         std::os::unix::fs::symlink(&outside, tmp.join("level.gltf")).unwrap();
         std::os::unix::fs::symlink(&outside, tmp.join("level.bin")).unwrap();
-        let data = Data {
-            root: root.clone(),
-            overlay: None,
-        };
+        let data = Data::new(Some(root.clone()));
         assert_eq!(shapes(&dir, None, &data).unwrap(), 0);
         assert_eq!(std::fs::read(&outside).unwrap(), b"keep");
         assert!(
@@ -1165,10 +1162,7 @@ mod tests {
         std::fs::create_dir_all(&copy).unwrap();
         (
             root,
-            Data {
-                root: copy,
-                overlay: None,
-            },
+            Data::new(Some(copy)),
         )
     }
 
@@ -1249,7 +1243,7 @@ mod tests {
         std::fs::create_dir_all(root.join("copy/Sounds")).unwrap();
         std::fs::write(root.join("copy/Sounds/Misc_Fall.WAV"), b"RIFF").unwrap();
         std::fs::write(root.join("copy/Sounds/readme.txt"), b"x").unwrap();
-        let data = Data { root: root.join("copy"), overlay: None };
+        let data = Data::new(Some(root.join("copy")));
         let sounds = root.join("sounds");
         let line = original_sounds(&data, &sounds).unwrap();
         assert!(line.contains("1 of"), "{line}");
