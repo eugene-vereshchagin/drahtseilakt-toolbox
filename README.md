@@ -68,6 +68,10 @@ named as a readme or as the map) is not imported: like packed archives, it is co
 the catalogue is imported with the title from its name and no difficulty. The catalogue is read as a stranger's
 file: at most 4 MiB, 20 000 rows and 1024 characters a cell, malformed rows skipped, values cleaned.
 
+Sets of modified originals (a folder whose name has 45-degree / rotat, reverse / 反向 or invisible / 隐形) are not community
+maps: `import-maps` puts them into `levels/modified/<Set>/<file stem>/<file>.nmo`, beside `levels/community`, the layout
+the game reads. Pro Racing and other new tracks stay community maps.
+
 `import-maps --refresh DIR --catalogue FILE --source DIR` brings a levels folder imported before (`levels/community`)
 up to the catalogue in place: each level's `level.txt` is written from the catalogue (looked up by its `source =`
 line and the folder's name; its comment, its `source =` line and other lines are kept), and a level folder that is

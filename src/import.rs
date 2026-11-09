@@ -37,6 +37,8 @@ pub struct Summary {
     pub links: Vec<PathBuf>,
     /// Maps that could not be imported, and why.
     pub failed: Vec<String>,
+    /// Maps of the modified originals (a 45-degree, reverse or invisible set) sorted into levels/modified.
+    pub modified: usize,
     /// Of the levels made: found in the catalogue, and kept for a readme beside them alone.
     pub catalogued: usize,
     pub readme_only: usize,
@@ -55,6 +57,76 @@ pub struct Sorting<'a> {
 pub fn default_unsorted(to: &Path) -> PathBuf {
     let parent = to.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
     parent.join("community-unsorted")
+}
+
+/// The modified originals folder beside a levels folder: `levels/community` -> `levels/modified`.
+pub fn default_modified(to: &Path) -> PathBuf {
+    let parent = to.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
+    parent.join("modified")
+}
+
+/// The set folder (as the game's modified.rs knows them: 45-degree / rotated, reverse, invisible, by name, in
+/// English or Chinese) a map lies in: the outermost such folder on its way below the download's folder, or the
+/// download's own folder. "Pro Racing" and the like are none: they are new geometry and stay community maps.
+fn modified_set(file: &Path, root: &Path) -> Option<String> {
+    let is_set = |n: &str| {
+        let l = n.to_lowercase();
+        ["45-degree", "rotat", "旋转", "revers", "反向", "invisib", "隐形"]
+            .iter()
+            .any(|w| l.contains(w))
+    };
+    let inside = file.strip_prefix(root).ok()?.parent()?;
+    let own = root.file_name().map(|n| n.to_string_lossy().into_owned());
+    inside
+        .components()
+        .map(|c| c.as_os_str().to_string_lossy().into_owned())
+        .chain(own)
+        .find(|n| is_set(n))
+}
+
+/// Writes a modified original as `modified/<set>/<file stem>/<file>.nmo` (and its preview), through a hidden folder
+/// renamed into place. A folder name taken by another map gets ` (2)`, ...; the same map again (an earlier run) is left
+/// alone: None. Returns the folder's path below `modified`.
+fn write_modified(modified: &Path, set: &str, file: &Path, bytes: &[u8]) -> Result<Option<PathBuf>, String> {
+    let fail = |p: &Path, e: std::io::Error| format!("{}: {e}", p.display());
+    let set_dir = modified.join(folder_name(set));
+    std::fs::create_dir_all(&set_dir).map_err(|e| fail(&set_dir, e))?;
+    let stem = file.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let base = folder_name(&stem);
+    let mut name = base.clone();
+    let mut n = 2u32;
+    while std::fs::symlink_metadata(set_dir.join(&name)).is_ok() {
+        let there = set_dir.join(&name).join(format!("{}.nmo", folder_name(&stem)));
+        if read_capped(&there, NMO_MAX).is_ok_and(|b| b == bytes) {
+            return Ok(None);
+        }
+        name = format!("{} ({n})", fit_name(&stem, NAME_MAX.saturating_sub(5)));
+        n = n.saturating_add(1);
+        if n > 999 {
+            return Err(format!("{}: no free folder name", set_dir.display()));
+        }
+    }
+    let tmp = set_dir.join(format!(".import-{}-{}", std::process::id(), fnv1a(name.as_bytes())));
+    if std::fs::symlink_metadata(&tmp).is_ok() {
+        std::fs::remove_dir_all(&tmp).map_err(|e| fail(&tmp, e))?;
+    }
+    std::fs::create_dir(&tmp).map_err(|e| fail(&tmp, e))?;
+    let result = (|| {
+        write_new(&tmp.join(format!("{}.nmo", folder_name(&stem))), bytes)?;
+        if let Some(img) = preview(file) {
+            let ext = img.extension().map(|x| x.to_string_lossy().to_lowercase()).unwrap_or_default();
+            let ext = if ext == "jpeg" { "jpg".to_owned() } else { ext };
+            if let Ok(b) = read_capped(&img, IMAGE_MAX) {
+                write_new(&tmp.join(format!("preview.{ext}")), &b)?;
+            }
+        }
+        let dst = set_dir.join(&name);
+        std::fs::rename(&tmp, &dst).map_err(|e| fail(&dst, e))
+    })();
+    if result.is_err() {
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+    result.map(|()| Some(PathBuf::from(folder_name(set)).join(name)))
 }
 
 /// One map found: its file and the folder it lies in.
@@ -161,6 +233,26 @@ pub fn import(
                 .to_path_buf();
             tell(format!("same as {}: {}", shown(&kept_rel), shown(&rel)));
             summary.duplicates.push((rel, kept_rel));
+            continue;
+        }
+        // a map of a modified originals set goes to levels/modified/<set>/<stem>/, whatever the catalogue says
+        if let Some(set) = modified_set(&m.file, &src) {
+            let modified = default_modified(&dst);
+            match write_modified(&modified, &set, &m.file, &bytes) {
+                Ok(None) => {
+                    tell(format!("already in modified: {}", shown(&rel)));
+                    summary.duplicates.push((rel.clone(), PathBuf::from("modified")));
+                }
+                Ok(Some(at)) => {
+                    by_hash.entry(key).or_default().push(m.file.clone());
+                    summary.modified += 1;
+                    tell(format!("modified/{}  <-  {}", printable(&at.to_string_lossy()), shown(&rel)));
+                }
+                Err(e) => {
+                    tell(format!("failed {}: {}", shown(&rel), printable(&e)));
+                    summary.failed.push(format!("{}: {e}", rel.display()));
+                }
+            }
             continue;
         }
         let names = names_of(&m.file, &src);
@@ -307,11 +399,12 @@ fn shown(p: &Path) -> String {
 /// One line saying what an import did.
 pub fn summary_line(s: &Summary, to: &Path) -> String {
     format!(
-        "{} levels made in {} ({} from the catalogue, {} for a readme); {} the same as another, {} set aside ({} packed archives, {} not in the catalogue and without a readme), {} links not followed, {} failed",
+        "{} levels made in {} ({} from the catalogue, {} for a readme), {} modified originals sorted into levels/modified; {} the same as another, {} set aside ({} packed archives, {} not in the catalogue and without a readme), {} links not followed, {} failed",
         s.imported,
         shown(to),
         s.catalogued,
         s.readme_only,
+        s.modified,
         s.duplicates.len(),
         s.set_aside.len(),
         s.set_aside.iter().filter(|(_, r)| *r == Reason::Archive).count(),
@@ -1210,8 +1303,8 @@ mod tests {
             std::fs::create_dir_all(p.parent().unwrap()).unwrap();
             std::fs::write(p, b).unwrap();
         };
-        mk("Rotated Maps/Level_01.NMO", b"r1");
-        mk("Rotated Maps/Level_02.NMO", b"r2");
+        mk("Pro Racing/Level_01.NMO", b"r1");
+        mk("Pro Racing/Level_02.NMO", b"r2");
         mk("Custom Maps/Hello Mars.NMO", b"mars");
         mk("Custom Maps/Hello Mars.jpg", b"jpg");
         mk("Custom Maps/Packed.tar.gz", b"gz");
@@ -1241,8 +1334,8 @@ mod tests {
                 "CON_",
                 "Hello Mars",
                 "Odd name",
-                "Rotated - Level 01",
-                "Rotated - Level 02",
+                "Pro Racing - Level 01",
+                "Pro Racing - Level 02",
                 "TrackW2",
                 "hello mars (2)"
             ]
@@ -1266,6 +1359,39 @@ mod tests {
         );
         let _ = std::fs::remove_dir_all(&src);
         let _ = std::fs::remove_dir_all(&dst);
+    }
+
+    #[test]
+    fn modified_originals_go_to_levels_modified_by_set() {
+        let base = temp("modified");
+        let src = base.join("download");
+        let dst = base.join("levels/community");
+        let mk = |p: &str, b: &[u8]| {
+            let p = src.join(p);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(p, b).unwrap();
+        };
+        mk("45-Degree Rotated Maps/Level_01.NMO", b"r1");
+        mk("45-Degree Rotated Maps/Level_01.jpg", b"pic");
+        mk("Reverse Maps/反向Level_02(新).NMO", b"v2");
+        mk("INVISIBLE maps/Level_03.nmo", b"i3");
+        mk("Pro Racing/Season 1/Track.NMO", b"pro");
+        let mut lines = Vec::new();
+        let s = import(&src, &dst, &plain(&dst), &mut |l| lines.push(l), &GO).unwrap();
+        assert_eq!((s.imported, s.modified), (1, 3), "{lines:?}");
+        let m = base.join("levels/modified");
+        assert_eq!(std::fs::read(m.join("45-Degree Rotated Maps/Level_01/Level_01.nmo")).unwrap(), b"r1");
+        assert_eq!(std::fs::read(m.join("45-Degree Rotated Maps/Level_01/preview.jpg")).unwrap(), b"pic");
+        assert_eq!(std::fs::read(m.join("Reverse Maps/反向Level_02(新)/反向Level_02(新).nmo")).unwrap(), b"v2");
+        assert!(m.join("INVISIBLE maps/Level_03/Level_03.nmo").is_file());
+        // Pro Racing stays a community map
+        assert!(dst.join("Track/Track.NMO").is_file(), "{lines:?}");
+        // the game reads the sets by the same names
+        assert!(modified_set(&src.join("Pro Racing/Season 1/Track.NMO"), &src).is_none());
+        // a second run adds nothing
+        let again = import(&src, &dst, &plain(&dst), &mut |_| {}, &GO).unwrap();
+        assert_eq!((again.imported, again.modified), (0, 0));
+        assert!(!m.join("Reverse Maps/反向Level_02(新) (2)").exists());
     }
 
     #[test]
