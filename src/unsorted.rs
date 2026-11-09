@@ -16,7 +16,7 @@ const ITEMS_MAX: usize = 20_000;
 const SEP: &str = "  —  ";
 const HEADER: &str = "Set aside by drahtseilakt-toolbox import-maps: these did not fit the game's levels and wait to be looked at by hand.\n\
 Packed archives: unpack them and import the folder. Folders that are not one level: split them into one folder per map.\n\
-Maps neither in the catalogue nor with a readme: put a level folder of your choice into levels/community yourself.\n\n";
+Maps neither in the catalogue nor with a readme: put a level folder of your choice into levels/downloaded yourself.\n\n";
 
 /// Why an item was set aside.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]

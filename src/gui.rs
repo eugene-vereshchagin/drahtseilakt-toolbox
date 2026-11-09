@@ -245,7 +245,7 @@ impl App {
         let cancel = Arc::new(AtomicBool::new(false));
         let (stop, ctx2) = (cancel.clone(), ctx.clone());
         std::thread::spawn(move || {
-            let to = gamedata::profile::dir(gamedata::profile::Kind::Community);
+            let to = gamedata::profile::dir(gamedata::profile::Kind::Downloaded);
             let (tell, repaint) = (send.clone(), ctx2.clone());
             let mut line = move |l: String| {
                 let _ = tell.send(Ok(Progress::Line(l)));

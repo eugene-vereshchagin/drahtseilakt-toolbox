@@ -35,14 +35,14 @@ commands:
                       it too); it stays in the game's data folder, never shared
   relief DIR          make one remastered level folder's relief again (masonry, and --relief if given)
   import-maps DIR     sort a downloaded collection of community maps (an unpacked archive, folders of any depth)
-                      into the game's levels/community: one folder per map with its .nmo, its preview picture
+                      into the game's levels/downloaded: one folder per map with its .nmo, its preview picture
                       and a level.txt with its title; the same map twice becomes one level; packed archives are
                       copied into the unsorted folder, not opened; DIR is only read. --to DIR imports elsewhere.
                       With --catalogue FILE each map found in it gets its English title, Chinese title, author
                       and difficulty, and a map neither in it nor with a readme beside it is copied into the
                       unsorted folder instead
   import-maps --refresh DIR --catalogue FILE [--source DIR]
-                      bring a levels folder imported before (levels/community) up to the catalogue in place:
+                      bring a levels folder imported before (levels/downloaded) up to the catalogue in place:
                       level.txt files rewritten from it; level folders that are not one level, or whose map is
                       neither in the catalogue nor has a readme (in the folder, or beside its source in the
                       collection --source DIR, which level.txt's source = line names a path in), moved into the
@@ -57,7 +57,7 @@ options:
                       NAME.param and NAME.bin are in its models/ folder
   --relief S          give lit textures normal maps of strength S (0 to 20, default 0: none); the relief is
                       guessed from the picture, so every crack and gap is deepened: keep it low (1 to 3)
-  --to DIR            with import-maps: the folder to make the levels in (default the game's levels/community)
+  --to DIR            with import-maps: the folder to make the levels in (default the game's levels/downloaded)
   --catalogue FILE    with import-maps: the community's catalogue (CustomMapList.md of BallanceCustomMaps)
   --unsorted DIR      with import-maps: where what does not fit is set aside, with a README.txt saying why
                       (default community-unsorted beside the levels folder)
@@ -168,7 +168,7 @@ fn main() -> ExitCode {
                     return Ok(());
                 }
                 let from = o.folder.ok_or("import-maps needs the folder of maps")?;
-                let to = o.to.unwrap_or_else(|| gamedata::profile::dir(gamedata::profile::Kind::Community));
+                let to = o.to.unwrap_or_else(|| gamedata::profile::dir(gamedata::profile::Kind::Downloaded));
                 let sorting = import::Sorting {
                     catalogue: catalogue.as_ref(),
                     unsorted: o.unsorted.unwrap_or_else(|| import::default_unsorted(&to)),

@@ -40,7 +40,7 @@ it). `remaster` (or `sounds` alone) also makes the "original" sound theme in the
 sounds and music; it is the original's, so it stays on the player's machine. Run it again after a newer toolbox to bring the levels up to date.
 
 `import-maps DIR` sorts a downloaded collection of community maps (an unpacked archive: folders of any depth,
-pictures, documents) into the game's `levels/community/` (or `--to DIR`), in the shape the game lists (the game's
+pictures, documents) into the game's `levels/downloaded/` (or `--to DIR`), in the shape the game lists (the game's
 levels.md, "A level is a folder"): one folder per map with its `.nmo`, its picture beside it as `preview.jpg`/`.png`,
 and a `level.txt` saying where it came from (and its whole title when the folder's name had to lose characters). A
 generic file name (`Level_07.NMO` in "45-Degree Rotated Maps") is named after its collection ("45-Degree Rotated -
@@ -49,7 +49,7 @@ names are made safe for Linux, Windows and macOS (no reserved names, no trailing
 characters cut at a word with "…", a second "Hello Mars" becomes "Hello Mars (2)"). Links are never followed, depth
 and counts are capped, the source is only read, and each level is written into a hidden folder and renamed into
 place. A second run adds only what is new. The window has the same as a field and an Import button.
-Unpack a download outside `levels/community/` (in Downloads, say): a source inside the folder it imports into is
+Unpack a download outside `levels/downloaded/` (in Downloads, say): a source inside the folder it imports into is
 refused. A folder of the download that cannot be read is skipped and named; names printed have control characters
 escaped.
 
@@ -69,10 +69,10 @@ the catalogue is imported with the title from its name and no difficulty. The ca
 file: at most 4 MiB, 20 000 rows and 1024 characters a cell, malformed rows skipped, values cleaned.
 
 Sets of modified originals (a folder whose name has 45-degree / rotat, reverse / 反向 or invisible / 隐形) are not community
-maps: `import-maps` puts them into `levels/modified/<Set>/<file stem>/<file>.nmo`, beside `levels/community`, the layout
+maps: `import-maps` puts them into `levels/modified/<Set>/<file stem>/<file>.nmo`, beside `levels/downloaded`, the layout
 the game reads. Pro Racing and other new tracks stay community maps.
 
-`import-maps --refresh DIR --catalogue FILE --source DIR` brings a levels folder imported before (`levels/community`)
+`import-maps --refresh DIR --catalogue FILE --source DIR` brings a levels folder imported before (`levels/downloaded`)
 up to the catalogue in place: each level's `level.txt` is written from the catalogue (looked up by its `source =`
 line and the folder's name; its comment, its `source =` line and other lines are kept), and a level folder that is
 not a single level (no map, or several), or whose map is neither in the catalogue nor has a readme (in its folder, or

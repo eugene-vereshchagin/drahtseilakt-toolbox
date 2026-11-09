@@ -41,7 +41,7 @@ realesrgan-x4plus, das mitkommt). `remaster` (oder `sounds` allein) macht auch d
 und der Musik der Kopie; es ist das Original und bleibt auf dem Rechner des Spielers. Nach einer neueren Toolbox erneut ausführen, um die Level zu erneuern.
 
 `import-maps DIR` sortiert eine geladene Sammlung von Community-Karten (ein entpacktes Archiv: Ordner beliebiger
-Tiefe, Bilder, Dokumente) in `levels/community/` des Spiels (oder `--to DIR`) so, wie das Spiel sie zeigt (levels.md
+Tiefe, Bilder, Dokumente) in `levels/downloaded/` des Spiels (oder `--to DIR`) so, wie das Spiel sie zeigt (levels.md
 des Spiels, „Ein Level ist ein Ordner“): ein Ordner je Karte mit ihrer `.nmo`, ihrem Bild daneben als
 `preview.jpg`/`.png` und einer `level.txt`, die sagt, woher sie kommt (und den ganzen Titel, wenn der Ordnername
 Zeichen verlieren musste). Ein nichtssagender Dateiname (`Level_07.NMO` in „45-Degree Rotated Maps“) wird nach seiner
@@ -51,7 +51,7 @@ Namen, keine Punkte oder Leerzeichen am Ende, höchstens 40 Zeichen, an einer Wo
 „Hello Mars“ wird „Hello Mars (2)“). Links werden nie verfolgt, Tiefe und Anzahl sind begrenzt, die Quelle wird nur
 gelesen, und jedes Level wird in einen versteckten Ordner geschrieben und an seinen Platz umbenannt. Ein zweiter Lauf
 fügt nur Neues hinzu. Das Fenster hat dasselbe als Feld und Import-Knopf.
-Einen Download außerhalb von `levels/community/` entpacken (etwa in Downloads): eine Quelle im Zielordner wird
+Einen Download außerhalb von `levels/downloaded/` entpacken (etwa in Downloads): eine Quelle im Zielordner wird
 abgelehnt. Ein unlesbarer Ordner des Downloads wird übersprungen und genannt; ausgegebene Namen haben ihre
 Steuerzeichen maskiert.
 
@@ -73,7 +73,7 @@ als fremde Datei gelesen: höchstens 4 MiB, 20 000 Zeilen und 1024 Zeichen je Ze
 Werte bereinigt.
 
 `import-maps --refresh DIR --catalogue FILE --source DIR` bringt einen früher importierten Level-Ordner
-(`levels/community`) an Ort und Stelle auf den Stand des Katalogs: die `level.txt` jedes Levels wird aus dem Katalog
+(`levels/downloaded`) an Ort und Stelle auf den Stand des Katalogs: die `level.txt` jedes Levels wird aus dem Katalog
 geschrieben (gesucht nach ihrer Zeile `source =` und dem Ordnernamen; ihr Kommentar, ihre Zeile `source =` und andere
 Zeilen bleiben), und ein Level-Ordner, der kein einzelnes Level ist (keine Karte oder mehrere), oder dessen Karte weder
 im Katalog steht noch eine Readme hat (in ihrem Ordner oder neben ihrer Quelle in der Sammlung `--source DIR`, zu der

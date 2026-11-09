@@ -1,6 +1,6 @@
 // `import-maps`: sorts a downloaded collection of community maps (an unpacked archive: folders of folders, pictures,
 // documents, packed archives) into the shape the game lists (the game's docs/drahtseilakt/levels.md, "A level is a
-// folder"): one folder per level directly in levels/community/, holding the `.nmo`, a preview picture when one lies
+// folder"): one folder per level directly in levels/downloaded/, holding the `.nmo`, a preview picture when one lies
 // beside it, and a level.txt with its title and where it came from. The source is a stranger's download: links are
 // never followed, depth, counts and sizes are capped, names are made safe for Linux, Windows and macOS, the source is
 // only read (copied, never moved), and each level is written into a hidden folder first and renamed into place, so a
@@ -53,13 +53,13 @@ pub struct Sorting<'a> {
     pub unsorted: PathBuf,
 }
 
-/// The unsorted folder beside a levels folder: `levels/community` -> `levels/community-unsorted`.
+/// The unsorted folder beside a levels folder: `levels/downloaded` -> `levels/downloaded-unsorted`.
 pub fn default_unsorted(to: &Path) -> PathBuf {
     let parent = to.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
     parent.join("community-unsorted")
 }
 
-/// The modified originals folder beside a levels folder: `levels/community` -> `levels/modified`.
+/// The modified originals folder beside a levels folder: `levels/downloaded` -> `levels/modified`.
 pub fn default_modified(to: &Path) -> PathBuf {
     let parent = to.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
     parent.join("modified")
