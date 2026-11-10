@@ -8,7 +8,7 @@
 
 ```
 drahtseilakt-toolbox                     (окно)
-drahtseilakt-toolbox remaster [--scale N] [--model NAME] [--relief S] [--data DIR]
+drahtseilakt-toolbox remaster [--levels LIST] [--scale N] [--model NAME] [--relief S] [--data DIR]
 drahtseilakt-toolbox relief DIR [--scale N] [--relief S]
 drahtseilakt-toolbox import-maps DIR [--to DIR] [--catalogue FILE] [--unsorted DIR]
 drahtseilakt-toolbox import-maps --refresh DIR --catalogue FILE [--source DIR] [--unsorted DIR]

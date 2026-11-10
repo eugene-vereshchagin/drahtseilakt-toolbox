@@ -216,7 +216,7 @@ impl App {
             };
             let result = std::fs::create_dir_all(&out)
                 .map_err(|e| format!("{}: {e}", out.display()))
-                .and_then(|()| remaster::run_in(&data, &out, scale, &model, relief, &mut watch))
+                .and_then(|()| remaster::run_in(&data, &out, scale, &model, relief, &[], &mut watch))
                 .and_then(|mut lines| {
                     let sounds = gamedata::profile::data_dir().join("sounds");
                     lines.push(remaster::original_sounds(&data, &sounds)?);

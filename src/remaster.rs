@@ -64,6 +64,7 @@ pub fn run(
     factor: u32,
     model: &str,
     relief_strength: f32,
+    only: &[String],
 ) -> Result<Vec<String>, String> {
     let cancel = AtomicBool::new(false);
     let mut watch = Watch {
@@ -71,7 +72,7 @@ pub fn run(
         cancel: &cancel,
     };
     let root = gamedata::profile::dir(gamedata::profile::Kind::Remastered);
-    let mut out = run_in(data, &root, factor, model, relief_strength, &mut watch)?;
+    let mut out = run_in(data, &root, factor, model, relief_strength, only, &mut watch)?;
     out.push(original_sounds(data, &gamedata::profile::data_dir().join("sounds"))?);
     Ok(out)
 }
@@ -135,28 +136,37 @@ pub fn run_in(
     factor: u32,
     model: &str,
     relief_strength: f32,
+    only: &[String],
     watch: &mut Watch<'_>,
 ) -> Result<Vec<String>, String> {
     let mut out = Vec::new();
+    // `--levels`: only the level folders named (a number is an original level, `7` = Level_07); empty: all of them
+    let wanted = |name: &str| {
+        only.is_empty()
+            || only.iter().any(|w| {
+                w == name || w.parse::<u32>().is_ok_and(|n| format!("Level_{n:02}") == name)
+            })
+    };
     let line = |out: &mut Vec<String>, watch: &mut Watch<'_>, l: String| {
         (watch.report)(Progress::Line(l.clone()));
         out.push(l);
     };
     for n in 1..=data.level_count().unwrap_or(13) {
         let dir = root.join(format!("Level_{n:02}"));
-        if std::fs::symlink_metadata(dir.join("level.gltf")).is_ok() {
+        if !wanted(&format!("Level_{n:02}")) || std::fs::symlink_metadata(dir.join("level.gltf")).is_ok() {
             continue;
         }
         let Some(loaded) = from_copy(data, n) else {
             continue;
         };
-        gamedata::assets::export(data, &loaded, &dir)?;
+        gamedata::assets::export(data, &loaded, &dir, true)?;
     }
     let mut levels: Vec<PathBuf> = std::fs::read_dir(root)
         .map_err(|e| format!("{}: {e}", root.display()))?
         .flatten()
         .map(|e| e.path())
         .filter(|p| real_dir(p) && real_file(&p.join("level.gltf")))
+        .filter(|p| p.file_name().and_then(|n| n.to_str()).is_some_and(wanted))
         .collect();
     levels.sort();
     let esrgan = esrgan();
@@ -1176,7 +1186,7 @@ mod tests {
             report: &mut report,
             cancel: &cancel,
         };
-        let out = run_in(&data, &root, 2, "realesrgan-x4plus", 0.0, &mut watch).unwrap();
+        let out = run_in(&data, &root, 2, "realesrgan-x4plus", 0.0, &[], &mut watch).unwrap();
         assert!(
             seen.iter()
                 .any(|p| matches!(p, Progress::Step { done: 0, total: 1, what } if what == "Mine")),
@@ -1224,7 +1234,7 @@ mod tests {
             report: &mut report,
             cancel: &cancel,
         };
-        let out = run_in(&data, &root, 2, "realesrgan-x4plus", 0.0, &mut watch).unwrap();
+        let out = run_in(&data, &root, 2, "realesrgan-x4plus", 0.0, &[], &mut watch).unwrap();
         assert_eq!(out, vec![CANCELLED.to_owned()]);
         // nothing was touched
         assert_eq!(

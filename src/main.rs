@@ -57,6 +57,7 @@ options:
                       NAME.param and NAME.bin are in its models/ folder
   --relief S          give lit textures normal maps of strength S (0 to 20, default 0: none); the relief is
                       guessed from the picture, so every crack and gap is deepened: keep it low (1 to 3)
+  --levels LIST       with remaster: only these levels (e.g. 1,7 or Level_01; default: every one)
   --to DIR            with import-maps: the folder to make the levels in (default the game's levels/downloaded)
   --catalogue FILE    with import-maps: the community's catalogue (CustomMapList.md of BallanceCustomMaps)
   --unsorted DIR      with import-maps: where what does not fit is set aside, with a README.txt saying why
@@ -72,6 +73,8 @@ struct Options {
     scale: u32,
     model: String,
     relief: f32,
+    /// `--levels`: the remastered level folders to make (empty: all).
+    levels: Vec<String>,
     data: Option<PathBuf>,
     /// The folder a command works on (relief, import-maps).
     folder: Option<PathBuf>,
@@ -89,6 +92,7 @@ fn options(args: impl Iterator<Item = String>) -> Result<Options, String> {
         scale: 4,
         model: "realesrgan-x4plus".into(),
         relief: 0.0,
+        levels: Vec::new(),
         data: None,
         folder: None,
         to: None,
@@ -108,6 +112,15 @@ fn options(args: impl Iterator<Item = String>) -> Result<Options, String> {
                 o.scale = n.clamp(1, 32);
             }
             "--data" => o.data = Some(value()?.into()),
+            "--levels" => {
+                o.levels = value()?
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .take(64)
+                    .map(str::to_owned)
+                    .collect()
+            }
             "--to" => o.to = Some(value()?.into()),
             "--catalogue" => o.catalogue = Some(value()?.into()),
             "--unsorted" => o.unsorted = Some(value()?.into()),
@@ -133,7 +146,7 @@ fn main() -> ExitCode {
         match o.command.as_deref() {
             Some("remaster") => {
                 let data = gamedata::assets::Data::locate(o.data)?;
-                for line in remaster::run(&data, o.scale, &o.model, o.relief)? {
+                for line in remaster::run(&data, o.scale, &o.model, o.relief, &o.levels)? {
                     println!("{line}");
                 }
                 Ok(())
