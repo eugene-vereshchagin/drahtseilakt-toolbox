@@ -40,6 +40,13 @@ Format neu, ohne ihn zu remastern. `--model` wählt ein anderes Real-ESRGAN-Mode
 realesrgan-x4plus, das mitkommt). `remaster` (oder `sounds` allein) macht auch das Klangthema „original“ im Datenordner des Spiels aus den Klängen
 und der Musik der Kopie; es ist das Original und bleibt auf dem Rechner des Spielers. Nach einer neueren Toolbox erneut ausführen, um die Level zu erneuern.
 
+Neben jedes große Bild (ab 512 x 512) schreibt `remaster` es auch fertig für die Grafikkarte (`name.dtx`: BC1 für ein
+deckendes Farbbild, BC7 für eines mit Alpha und für eine Normal Map, mit allen Mip-Stufen; unser eigener Encoder). Das
+Spiel lädt diese statt der PNGs: ein Level in 4K lädt dann in ein paar Sekunden und belegt etwa ein Fünftel des
+Videospeichers. Die PNGs bleiben (für den nächsten Lauf, und das Spiel fällt auf sie zurück); ein Bild, das in einem
+Lauf einmal vergrößert wurde, wird für jedes Teil mit demselben kopiert, so ist der Lauf kürzer und das Spiel lädt es
+einmal. Level, die eine ältere Toolbox gemacht hat, haben keine: `remaster` noch einmal laufen lassen.
+
 `import-maps DIR` sortiert eine geladene Sammlung von Community-Karten (ein entpacktes Archiv: Ordner beliebiger
 Tiefe, Bilder, Dokumente) in `levels/downloaded/` des Spiels (oder `--to DIR`) so, wie das Spiel sie zeigt (levels.md
 des Spiels, „Ein Level ist ein Ordner“): ein Ordner je Karte mit ihrer `.nmo`, ihrem Bild daneben als

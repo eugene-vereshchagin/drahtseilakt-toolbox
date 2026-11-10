@@ -140,6 +140,12 @@ pub fn run_in(
     watch: &mut Watch<'_>,
 ) -> Result<Vec<String>, String> {
     let mut out = Vec::new();
+    if let Ok(mut m) = GROWN.lock() {
+        m.clear();
+    }
+    if let Ok(mut m) = COMPRESSED.lock() {
+        m.clear();
+    }
     // `--levels`: only the level folders named (a number is an original level, `7` = Level_07); empty: all of them
     let wanted = |name: &str| {
         only.is_empty()
@@ -256,6 +262,18 @@ pub fn run_in(
                 format!("{}: no relief: {e}", dir.display()),
             ),
         }
+        match compress(&dir, watch) {
+            Ok((n, bytes)) => line(
+                &mut out,
+                watch,
+                format!("{}: {n} textures compressed for the graphics card ({} MB)", dir.display(), bytes / (1024 * 1024)),
+            ),
+            Err(e) => line(
+                &mut out,
+                watch,
+                format!("{}: textures not compressed: {e}", dir.display()),
+            ),
+        }
         if let Some(model) = &model {
             let l = game_files(
                 data,
@@ -299,7 +317,7 @@ fn game_files(
     watch: &mut Watch<'_>,
 ) -> String {
     let game = dir.join(gamedata::assets::GAME_FILES);
-    let (mut parts, mut grown, mut files) = (0usize, 0usize, 0usize);
+    let (mut parts, mut grown, mut files, mut compressed) = (0usize, 0usize, 0usize, 0usize);
     for rel in gamedata::assets::parts_used(data, model) {
         if watch.stopped() {
             break;
@@ -333,6 +351,10 @@ fn game_files(
         if let Err(e) = relief(&part_dir, factor, relief_strength) {
             out.push(format!("{}: no relief: {e}", part_dir.display()));
         }
+        match compress(&part_dir, watch) {
+            Ok((n, _)) => compressed += n,
+            Err(e) => out.push(format!("{}: textures not compressed: {e}", part_dir.display())),
+        }
     }
     if real_dirs(root, &game).is_ok() {
         for rel in gamedata::assets::files_used(data, model) {
@@ -344,7 +366,7 @@ fn game_files(
         }
     }
     format!(
-        "{}: {parts} parts remade ({grown} of their textures x{factor}), {files} game files",
+        "{}: {parts} parts remade ({grown} of their textures x{factor}, {compressed} compressed), {files} game files",
         game.display()
     )
 }
@@ -492,7 +514,17 @@ pub fn relief_folder(dir: &Path, scale: u32, strength: f32) -> Result<usize, Str
         m.texture = m.texture.and_then(|t| map.get(t).copied().flatten());
     }
     write_level(dir, &level)?;
-    relief(dir, scale, strength)
+    let n = relief(dir, scale, strength)?;
+    // the normal maps are new pictures: their compressed textures are made again
+    let cancel = AtomicBool::new(false);
+    compress(
+        dir,
+        &mut Watch {
+            report: &mut |_| {},
+            cancel: &cancel,
+        },
+    )?;
+    Ok(n)
 }
 
 fn relief(dir: &Path, scale: u32, strength: f32) -> Result<usize, String> {
@@ -774,13 +806,26 @@ fn level(
             // a tiny texture (a blurred reflection map, a gradient) has nothing for Real-ESRGAN to go on: it invents
             // detail there (cracks in a chrome reflection), so it is resampled
             let tiny = source.width().min(source.height()) < ESRGAN_MIN_SIDE;
+            // the file keeps its own format (what the level file names)
+            let format = image::ImageFormat::from_path(&path).map_err(|e| e.to_string())?;
+            // the same picture grown before in this run (a level and its parts carry the same textures): that file
+            // copied, so the work is done once and the copies are the same to the byte (the game then keeps one)
+            let same = (
+                gamedata::gputex::data_hash(source.as_raw()),
+                source.dimensions(),
+                factor,
+                esrgan.map(|(_, m)| m.to_owned()),
+                path.extension().map(|e| e.to_ascii_lowercase()),
+            );
+            let before = GROWN.lock().ok().and_then(|g| g.get(&same).cloned());
+            if let Some(first) = before.filter(|f| *f != path && real_file(f)) {
+                return replace(&path, |t| std::fs::copy(&first, t).map(drop).map_err(|e| e.to_string()));
+            }
             let big = match esrgan.filter(|_| !tiny) {
                 Some((prog, model)) => esrgan_upscale(prog, model, &source, factor, &tmp)
                     .unwrap_or_else(|_| lanczos(&source, factor)),
                 None => lanczos(&source, factor),
             };
-            // the file keeps its own format (what the level file names)
-            let format = image::ImageFormat::from_path(&path).map_err(|e| e.to_string())?;
             replace(&path, |t| {
                 let img = image::DynamicImage::ImageRgba8(big);
                 let img = if format == image::ImageFormat::Jpeg {
@@ -789,7 +834,11 @@ fn level(
                     img
                 };
                 img.save_with_format(t, format).map_err(|e| e.to_string())
-            })
+            })?;
+            if let Ok(mut g) = GROWN.lock() {
+                g.insert(same, path.clone());
+            }
+            Ok(())
         };
         match one() {
             Ok(()) => {
@@ -810,6 +859,103 @@ fn level(
         let _ = std::fs::remove_dir_all(&tmp);
     }
     Ok(done)
+}
+
+/// What makes a grown picture: its source's pixels (hash and size), the factor, the model, the file's format.
+type GrownKey = (u64, (u32, u32), u32, Option<String>, Option<std::ffi::OsString>);
+/// The pictures grown in this run, and the compressed textures made (by their picture file's length and hash).
+static GROWN: std::sync::Mutex<std::collections::BTreeMap<GrownKey, PathBuf>> =
+    std::sync::Mutex::new(std::collections::BTreeMap::new());
+static COMPRESSED: std::sync::Mutex<std::collections::BTreeMap<(u64, u64, bool), PathBuf>> =
+    std::sync::Mutex::new(std::collections::BTreeMap::new());
+
+/// Writes the compressed texture (`name.dtx`, the game's gputex.rs) beside every large picture the level's materials
+/// draw with: BC1 for an opaque colour picture, BC7 for one with alpha and for a normal map. The game loads it in
+/// place of the picture (no decoding, an eighth or a quarter of the video memory); the picture stays, for a graphics
+/// card without BC and for the next run. One made from the same picture before is left; a small picture's, or one
+/// whose sides are not multiples of four, has none (one left from before is removed). Returns how many the level has
+/// and their bytes.
+fn compress(dir: &Path, watch: &mut Watch<'_>) -> Result<(usize, u64), String> {
+    use gamedata::gputex;
+    let level = level::open::import(dir)?;
+    if !real_dir(&dir.join("textures")) {
+        return Err("textures/ missing or a link".into());
+    }
+    let normals: std::collections::HashSet<usize> = level.materials.iter().filter_map(|m| m.normal).collect();
+    let (mut count, mut bytes) = (0usize, 0u64);
+    for (i, t) in level.textures.iter().enumerate() {
+        if watch.stopped() {
+            break;
+        }
+        let level::TextureSource::LevelFile(path) = &t.source else {
+            continue;
+        };
+        // only the files the export names (plain ones in textures/)
+        if *path != dir.join(level::open::texture_file(i, &t.name)) || !real_file(path) {
+            continue;
+        }
+        let dtx = path.with_extension("dtx");
+        let fine = normals.contains(&i);
+        let one = || -> Result<Option<u64>, String> {
+            let file = std::fs::read(path).map_err(|e| e.to_string())?;
+            let source = (file.len() as u64, gputex::data_hash(&file));
+            // made from this very picture already
+            let made = |p: &Path| {
+                use std::io::Read;
+                let mut head = [0u8; gputex::HEADER_LEN];
+                real_file(p)
+                    && std::fs::File::open(p).and_then(|mut f| f.read_exact(&mut head)).is_ok()
+                    && gputex::header(&head).is_ok_and(|h| {
+                        (h.source_len, h.source_hash) == source
+                            && std::fs::metadata(p).is_ok_and(|m| m.len() == h.file_len())
+                    })
+            };
+            if made(&dtx) {
+                return Ok(std::fs::metadata(&dtx).ok().map(|m| m.len()));
+            }
+            // the same picture compressed before in this run: that file copied
+            let same = (source.0, source.1, fine);
+            let before = COMPRESSED.lock().ok().and_then(|c| c.get(&same).cloned());
+            if let Some(first) = before.filter(|f| made(f)) {
+                replace(&dtx, |tmp| std::fs::copy(&first, tmp).map(drop).map_err(|e| e.to_string()))?;
+                return Ok(std::fs::metadata(&dtx).ok().map(|m| m.len()));
+            }
+            let img = load(path)?;
+            let (w, h) = img.dimensions();
+            if u64::from(w) * u64::from(h) < crate::bc::MIN_PIXELS || !w.is_multiple_of(4) || !h.is_multiple_of(4) {
+                return Ok(None);
+            }
+            let format = crate::bc::format_for(img.as_raw(), fine);
+            let levels = crate::bc::encode(w, h, img.as_raw(), format).ok_or("not whole blocks")?;
+            let out = gputex::write(format, w, h, source, &levels)?;
+            let len = out.len() as u64;
+            replace(&dtx, |tmp| std::fs::write(tmp, &out).map_err(|e| e.to_string()))?;
+            if let Ok(mut c) = COMPRESSED.lock() {
+                c.insert(same, dtx.clone());
+            }
+            Ok(Some(len))
+        };
+        match one() {
+            Ok(Some(len)) => {
+                count += 1;
+                bytes += len;
+            }
+            // no compressed texture for this picture: one left from before (of another picture) goes
+            Ok(None) => {
+                if std::fs::symlink_metadata(&dtx).is_ok_and(|m| !m.is_dir()) {
+                    let _ = std::fs::remove_file(&dtx);
+                }
+            }
+            Err(e) => {
+                if std::fs::symlink_metadata(&dtx).is_ok_and(|m| !m.is_dir()) {
+                    let _ = std::fs::remove_file(&dtx);
+                }
+                let l = format!("{}: not compressed: {e}", path.display());
+                (watch.report)(Progress::Line(l));
+            }
+        }
+    }
+    Ok((count, bytes))
 }
 
 fn key_of(v: &serde_json::Value) -> Option<[u8; 3]> {

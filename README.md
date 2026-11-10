@@ -39,6 +39,13 @@ level folder of the open format again, without remastering it. `--model` picks a
 it). `remaster` (or `sounds` alone) also makes the "original" sound theme in the game's data folder from the copy's
 sounds and music; it is the original's, so it stays on the player's machine. Run it again after a newer toolbox to bring the levels up to date.
 
+Beside every large picture (512 x 512 and up) `remaster` also writes it ready for the graphics card (`name.dtx`:
+BC1 for an opaque colour picture, BC7 for one with alpha and for a normal map, with all mip levels; our own encoder).
+The game loads these instead of the PNGs: a level in 4K then loads in a couple of seconds and takes about a fifth of
+the video memory. The PNGs stay (for the next run, and the game falls back to them); a picture grown once in a run is
+copied for every part that carries the same one, so the run is shorter and the game uploads it once. Levels remastered
+by an older toolbox have none: run `remaster` again.
+
 `import-maps DIR` sorts a downloaded collection of community maps (an unpacked archive: folders of any depth,
 pictures, documents) into the game's `levels/downloaded/` (or `--to DIR`), in the shape the game lists (the game's
 levels.md, "A level is a folder"): one folder per map with its `.nmo`, its picture beside it as `preview.jpg`/`.png`,
