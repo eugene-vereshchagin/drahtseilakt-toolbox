@@ -48,8 +48,8 @@ pub const CANCELLED: &str =
 const PART_GROWN: &str =
     "stopped among its textures: some grown, the rest as they were (the next run grows them all)";
 
-/// The largest side a texture is made (GPU textures of 8K are common; the originals are 128 to 256).
-const SIDE_MAX: u32 = 8192;
+/// The largest side a texture is made (4K; the originals are 128 to 256).
+const SIDE_MAX: u32 = 4096;
 /// The smallest side of a texture Real-ESRGAN is given; smaller ones are resampled with Lanczos.
 const ESRGAN_MIN_SIDE: u32 = 64;
 /// The largest level file and texture read.
@@ -1265,9 +1265,9 @@ mod tests {
     }
 
     #[test]
-    fn the_size_grows_by_the_factor_up_to_8k() {
+    fn the_size_grows_by_the_factor_up_to_4k() {
         assert_eq!(target(128, 64, 8), (1024, 512));
-        assert_eq!(target(4096, 4096, 8), (8192, 8192));
-        assert_eq!(target(8192, 8192, 8), (8192, 8192));
+        assert_eq!(target(1024, 1024, 8), (4096, 4096));
+        assert_eq!(target(4096, 4096, 8), (4096, 4096));
     }
 }
