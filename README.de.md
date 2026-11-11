@@ -62,6 +62,8 @@ Einen Download außerhalb von `levels/downloaded/` entpacken (etwa in Downloads)
 abgelehnt. Ein unlesbarer Ordner des Downloads wird übersprungen und genannt; ausgegebene Namen haben ihre
 Steuerzeichen maskiert.
 
+Nach dem Anlegen der Karten bittet das Programm das Spiel (`drahtseilakt` daneben oder im PATH), jede zu prüfen: Das Ergebnis nennt zu jeder Karte ein Urteil (läuft vollständig, mit Abweichungen, evtl. nicht schaffbar, lässt sich nicht laden) und was das Spiel darin noch nicht unterstützt, etwa unbekannte Skript-Blöcke, still stehende skriptgesteuerte Teile, vom Autor nicht mitgelieferte Texturen, Sounds der Skripte. Die Prüfung liegt als `report.txt` neben der Karte und erscheint in der Liste der heruntergeladenen Karten im Spiel. Ohne das Spiel werden die Karten trotzdem importiert; später `drahtseilakt --audit-report DIR` ausführen.
+
 Mit `--catalogue FILE` (dem Katalog der Community, `CustomMapList.md` von
 [BallanceCustomMaps](https://github.com/pseudoacetyl/BallanceCustomMaps)) wird jede Karte nach dem Namen ihrer Datei
 und ihres Ordners gesucht (Groß- und Kleinschreibung, Satzzeichen, Leerzeichen, Zeichen voller Breite und

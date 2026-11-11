@@ -60,6 +60,8 @@ Unpack a download outside `levels/downloaded/` (in Downloads, say): a source ins
 refused. A folder of the download that cannot be read is skipped and named; names printed have control characters
 escaped.
 
+After the maps are made, the toolbox asks the game (`drahtseilakt` beside it or on the PATH) to check each one: the result lists every map with a verdict (plays fully, plays with differences, may not be passable, does not load) and what the game does not support yet in it, such as script blocks it does not know, script-driven parts that stand still, textures the author did not include, sounds of the scripts. The check is kept beside each map as `report.txt` and shown in the game's list of downloaded maps. Without the game at hand the maps are still imported; run `drahtseilakt --audit-report DIR` later.
+
 With `--catalogue FILE` (the community's catalogue, `CustomMapList.md` of
 [BallanceCustomMaps](https://github.com/pseudoacetyl/BallanceCustomMaps)) each map is looked up by its file's name
 and its folder's (case, punctuation, spaces, full-width characters and "v1.0"/"V1.0"/"1.0" do not matter; a version
