@@ -255,6 +255,13 @@ impl App {
             let result = crate::import::import(&from, &to, &sorting, &mut line, &stop);
             if let Ok(s) = &result {
                 let _ = send.send(Ok(Progress::Line(crate::import::summary_line(s, &to))));
+                // what the game does not support yet in each map, so the player knows before playing
+                if s.imported > 0 {
+                    crate::import::check_maps(&to, &mut |l| {
+                        let _ = send.send(Ok(Progress::Line(l)));
+                        ctx2.request_repaint();
+                    });
+                }
             }
             let _ = send.send(result.map(|_| Progress::Step { done: 0, total: 0, what: String::new() }));
             ctx2.request_repaint();
@@ -276,7 +283,8 @@ impl App {
                 Err(std::sync::mpsc::TryRecvError::Empty) => break,
                 // the worker is gone without its last word (it failed): the run is over
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                    finished = Some(Err("the work stopped unexpectedly".to_owned()));
+                    // unless its last word came in this very round: that one stands
+                    finished.get_or_insert(Err("the work stopped unexpectedly".to_owned()));
                     break;
                 }
             };

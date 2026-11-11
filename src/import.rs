@@ -414,6 +414,56 @@ pub fn summary_line(s: &Summary, to: &Path) -> String {
     )
 }
 
+/// The game's program: the one beside the toolbox, else one on the PATH.
+fn game_program() -> Option<PathBuf> {
+    let name = if cfg!(windows) { "drahtseilakt.exe" } else { "drahtseilakt" };
+    let beside = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|d| d.join(name)));
+    let on_path = std::env::var_os("PATH")
+        .into_iter()
+        .flat_map(|p| std::env::split_paths(&p).collect::<Vec<_>>())
+        .map(|d| d.join(name));
+    beside.into_iter().chain(on_path).find(|f| f.is_file())
+}
+
+/// Has the game check the maps just made in `to` and say, per map, what it does not support yet in it; the game writes
+/// each map's report.txt (its audit is the source of truth, the toolbox only asks) and `say` gets its lines (a map's
+/// title, then its verdict and the lines under it). A game that is not there or a check that fails only costs the
+/// report: the maps are imported either way.
+pub fn check_maps(to: &Path, say: &mut dyn FnMut(String)) {
+    use std::io::BufRead;
+    use std::process::{Command, Stdio};
+    let Some(game) = game_program() else {
+        say(format!("map check skipped: the game (drahtseilakt) is not beside the toolbox or on the PATH; run `drahtseilakt --audit-report {}` later", shown(to)));
+        return;
+    };
+    say("checking the maps for what the game does not support yet ...".to_owned());
+    let child = Command::new(game)
+        .arg("--audit-report")
+        .arg(to)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn();
+    let mut child = match child {
+        Ok(c) => c,
+        Err(e) => return say(format!("map check could not start: {e}")),
+    };
+    if let Some(out) = child.stdout.take() {
+        // the game's own words (its language), a line at a time, capped: its bookkeeping lines are left out
+        for l in std::io::BufReader::new(out).lines().take(100_000).map_while(Result::ok) {
+            if !l.starts_with("paths:") && !l.starts_with("report:") {
+                say(printable(&l));
+            }
+        }
+    }
+    match child.wait() {
+        Ok(st) if st.success() => {}
+        Ok(st) => say(format!("map check ended with {st}: some maps have no report")),
+        Err(e) => say(format!("map check failed: {e}")),
+    }
+}
+
 /// Collects the `.nmo` files under `dir`, the archives and the links, never following a link.
 fn walk(dir: &Path, depth: usize, seen: &mut usize, maps: &mut Vec<Found>, s: &mut Summary) -> Result<(), String> {
     let read = match std::fs::read_dir(dir) {
