@@ -34,6 +34,14 @@ commands:
                       Brickwork in concrete is told by its colour and drawn with depth (masonry relief).
   sounds              make only the 'original' sound theme from the copy's sounds and music (remaster makes
                       it too); it stays in the game's data folder, never shared
+  remaster-open DIR   the remaster of one open-format level folder in place (no copy of the original needed): rounder
+                      shapes, larger textures (--scale, --model), masonry relief (--relief); the plain originals stay
+                      in textures.original/, so running it again does not grow anything twice. Looks only: physics
+                      and replays stay the same.
+  remaster-nmo FILE   the remaster of one community map (.nmo): the map exported as an open-format level into
+                      FILE.remaster beside it (looks and pictures only; the game plays the map itself and draws
+                      its meshes in these looks), then rounded and enlarged as remaster-open does. The map file
+                      is only read. Back to 2004 draws the map as it is.
   relief DIR          make one remastered level folder's relief again (masonry, and --relief if given)
   import-maps DIR     sort a downloaded collection of community maps (an unpacked archive, folders of any depth)
                       into the game's levels/downloaded: one folder per map with its .nmo, its preview picture
@@ -158,6 +166,20 @@ fn main() -> ExitCode {
                 // only the "original" sound theme, from the copy's sounds and music
                 let data = gamedata::assets::Data::locate(o.data)?;
                 println!("{}", remaster::original_sounds(&data, &gamedata::profile::data_dir().join("sounds"))?);
+                Ok(())
+            }
+            Some("remaster-open") => {
+                let dir = o.folder.ok_or("remaster-open needs the level's folder")?;
+                for line in remaster::remaster_folder(&dir, o.scale, &o.model, o.relief)? {
+                    println!("{line}");
+                }
+                Ok(())
+            }
+            Some("remaster-nmo") => {
+                let file = o.folder.ok_or("remaster-nmo needs the .nmo file")?;
+                for line in remaster::remaster_nmo(&file, o.scale, &o.model, o.relief)? {
+                    println!("{line}");
+                }
                 Ok(())
             }
             Some("relief") => {

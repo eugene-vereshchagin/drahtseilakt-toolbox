@@ -7,10 +7,14 @@
 ```
 drahtseilakt-toolbox                     （窗口）
 drahtseilakt-toolbox remaster [--levels LIST] [--scale N] [--model NAME] [--relief S] [--data DIR]
+drahtseilakt-toolbox remaster-open DIR [--scale N] [--model NAME] [--relief S]
+drahtseilakt-toolbox remaster-nmo FILE.nmo [--scale N] [--model NAME] [--relief S]
 drahtseilakt-toolbox relief DIR [--scale N] [--relief S]
 drahtseilakt-toolbox import-maps DIR [--to DIR] [--catalogue FILE] [--unsorted DIR]
 drahtseilakt-toolbox import-maps --refresh DIR --catalogue FILE [--source DIR] [--unsorted DIR]
 ```
+
+`remaster-open` 就地重制一个开放格式关卡文件夹（更圆的形状、更大的纹理、砖墙浮雕；朴素的原图保留在 `textures.original/`，再次运行不会重复放大）。`remaster-nmo` 在社区地图旁生成 `FILE.remaster/`：其外观与图片，游戏会将其贴到地图的网格上。“回到2004年”模组会以朴素外观显示两者。
 
 不带命令启动时会打开窗口（Linux X11 或 Wayland、Windows、macOS；它会在游戏数据文件夹的 `toolbox.txt` 中记住上次选择的模型和放大倍数）：你的游戏拷贝、放大倍数、Real-ESRGAN 模型、浮雕、“开始制作”按钮、按关卡和部件显示的进度（可取消）、结果，以及一张纹理处理前后的对比。界面文字有英语、俄语、德语和简体中文，按系统语言或在窗口中选择；中文使用系统已有的字体（Noto CJK、Microsoft YaHei、PingFang 等）。
 

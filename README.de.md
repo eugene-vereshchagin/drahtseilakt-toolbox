@@ -9,10 +9,14 @@ Level-Ordnern liegt; alles Schwere, was Level modern aussehen lässt, lebt hier,
 ```
 drahtseilakt-toolbox                     (das Fenster)
 drahtseilakt-toolbox remaster [--levels LIST] [--scale N] [--model NAME] [--relief S] [--data DIR]
+drahtseilakt-toolbox remaster-open DIR [--scale N] [--model NAME] [--relief S]
+drahtseilakt-toolbox remaster-nmo FILE.nmo [--scale N] [--model NAME] [--relief S]
 drahtseilakt-toolbox relief DIR [--scale N] [--relief S]
 drahtseilakt-toolbox import-maps DIR [--to DIR] [--catalogue FILE] [--unsorted DIR]
 drahtseilakt-toolbox import-maps --refresh DIR --catalogue FILE [--source DIR] [--unsorted DIR]
 ```
+
+`remaster-open` überarbeitet den Ordner eines Levels im offenen Format an Ort und Stelle (rundere Formen, größere Texturen, Mauerrelief; die schlichten Originale bleiben in `textures.original/`, ein zweiter Lauf vergrößert nichts doppelt). `remaster-nmo` legt neben einer Community-Karte `FILE.remaster/` an: ihre Ansicht und Bilder, die das Spiel auf die Netze der Karte legt. Der Mod „Zurück ins Jahr 2004“ zeigt beides schlicht.
 
 Ohne Befehl gestartet öffnet die Toolbox ihr Fenster (Linux X11 oder Wayland, Windows, macOS; Modell und Faktor
 der letzten Wahl merkt es sich in `toolbox.txt` im Datenordner des Spiels): deine Kopie des

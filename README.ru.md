@@ -9,10 +9,14 @@
 ```
 drahtseilakt-toolbox                     (окно)
 drahtseilakt-toolbox remaster [--levels LIST] [--scale N] [--model NAME] [--relief S] [--data DIR]
+drahtseilakt-toolbox remaster-open DIR [--scale N] [--model NAME] [--relief S]
+drahtseilakt-toolbox remaster-nmo FILE.nmo [--scale N] [--model NAME] [--relief S]
 drahtseilakt-toolbox relief DIR [--scale N] [--relief S]
 drahtseilakt-toolbox import-maps DIR [--to DIR] [--catalogue FILE] [--unsorted DIR]
 drahtseilakt-toolbox import-maps --refresh DIR --catalogue FILE [--source DIR] [--unsorted DIR]
 ```
+
+`remaster-open` переделывает папку одного уровня в открытом формате на месте (скруглённые формы, крупные текстуры, рельеф кладки; простые оригиналы остаются в `textures.original/`, повторный запуск ничего не увеличивает дважды). `remaster-nmo` делает рядом с картой сообщества папку `FILE.remaster/`: её вид и картинки, которые игра накладывает на сетки карты. Мод «Назад в 2004» показывает оба набора простыми.
 
 Запущенный без команды, toolbox открывает окно (Linux X11 или Wayland, Windows, macOS; последние выбранные модель и
 увеличение оно помнит в `toolbox.txt` в папке данных игры): ваша копия игры, во сколько
