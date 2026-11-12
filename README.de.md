@@ -16,6 +16,8 @@ drahtseilakt-toolbox import-maps DIR [--to DIR] [--catalogue FILE] [--unsorted D
 drahtseilakt-toolbox import-maps --refresh DIR --catalogue FILE [--source DIR] [--unsorted DIR]
 ```
 
+**Ordner (2026-11-12).** In `levels/` des Spiels liegen `ballance-original/` (Ihre Kopie), `ballance-remaster/` (dorthin schreibt `remaster`) und `user-levels/` (dorthin schreibt `import-maps` standardmäßig; die früheren Namen `original/`, `remastered/` und `downloaded/` benennt das Spiel beim ersten Start um). Ein Level zählt nur dann als Level, wenn es in einem eigenen benannten Ordner liegt, der entweder eine `.nmo`-Datei oder ein Level im offenen Format enthält, dazu die Beschreibungsdatei `level.txt`: genau so sortiert `import-maps` ein.
+
 `remaster-open` überarbeitet den Ordner eines Levels im offenen Format an Ort und Stelle (rundere Formen, größere Texturen, Mauerrelief; die schlichten Originale bleiben in `textures.original/`, ein zweiter Lauf vergrößert nichts doppelt). `remaster-nmo` legt neben einer Community-Karte `FILE.remaster/` an: ihre Ansicht und Bilder, die das Spiel auf die Netze der Karte legt. Der Mod „Zurück ins Jahr 2004“ zeigt beides schlicht.
 
 Ohne Befehl gestartet öffnet die Toolbox ihr Fenster (Linux X11 oder Wayland, Windows, macOS; Modell und Faktor
@@ -25,7 +27,7 @@ mit Abbrechen, das Ergebnis und eine Textur vorher und nachher. Die Texte gibt e
 und vereinfachtem Chinesisch, nach der Systemsprache oder im Fenster gewählt; Chinesisch nutzt eine Schrift des
 Systems (Noto CJK, Microsoft YaHei, PingFang...).
 
-`remaster` wandelt die Original-Level der Kopie nach `levels/remastered/` des Spiels (offenes Format), gibt jedem
+`remaster` wandelt die Original-Level der Kopie nach `levels/ballance-remaster/` des Spiels (offenes Format), gibt jedem
 Level rundere Formen (ins Level neben die ursprünglichen Meshes geschrieben, die die Physik weiter benutzt, sodass
 Läufe gleich bleiben) und vergrößert die Texturen N-fach (Standard 4; 1 lässt sie). Mit Real-ESRGAN gewinnen die
 Texturen Details, sonst werden sie mit Lanczos skaliert (wie Texturen unter 64 Pixeln, denen es Details erfinden
@@ -52,7 +54,7 @@ Lauf einmal vergrößert wurde, wird für jedes Teil mit demselben kopiert, so i
 einmal. Level, die eine ältere Toolbox gemacht hat, haben keine: `remaster` noch einmal laufen lassen.
 
 `import-maps DIR` sortiert eine geladene Sammlung von Community-Karten (ein entpacktes Archiv: Ordner beliebiger
-Tiefe, Bilder, Dokumente) in `levels/downloaded/` des Spiels (oder `--to DIR`) so, wie das Spiel sie zeigt (levels.md
+Tiefe, Bilder, Dokumente) in `levels/user-levels/` des Spiels (oder `--to DIR`) so, wie das Spiel sie zeigt (levels.md
 des Spiels, „Ein Level ist ein Ordner“): ein Ordner je Karte mit ihrer `.nmo`, ihrem Bild daneben als
 `preview.jpg`/`.png` und einer `level.txt`, die sagt, woher sie kommt (und den ganzen Titel, wenn der Ordnername
 Zeichen verlieren musste). Ein nichtssagender Dateiname (`Level_07.NMO` in „45-Degree Rotated Maps“) wird nach seiner
@@ -63,7 +65,7 @@ Namen, keine Punkte oder Leerzeichen am Ende, höchstens 40 Zeichen, an einer Wo
 gelesen, und jedes Level wird in einen versteckten Ordner geschrieben und an seinen Platz umbenannt. Ein zweiter Lauf
 fügt nur Neues hinzu. Das Fenster hat dasselbe als Feld und Import-Knopf.
 Jedes Pfadfeld im Fenster hat einen Durchsuchen…-Knopf (die Spielkopie auch Abbild… für ein CD-Abbild: .cue, .bin, .iso), der den Systemdialog öffnet; der Pfad wird wie ein getippter geprüft, der Ordner gemerkt. Unter Linux braucht es xdg-desktop-portal mit einem Backend (-gtk, -kde, -gnome); ohne bleibt das Feld zum Tippen.
-Einen Download außerhalb von `levels/downloaded/` entpacken (etwa in Downloads): eine Quelle im Zielordner wird
+Einen Download außerhalb von `levels/user-levels/` entpacken (etwa in Downloads): eine Quelle im Zielordner wird
 abgelehnt. Ein unlesbarer Ordner des Downloads wird übersprungen und genannt; ausgegebene Namen haben ihre
 Steuerzeichen maskiert.
 
@@ -87,7 +89,7 @@ als fremde Datei gelesen: höchstens 4 MiB, 20 000 Zeilen und 1024 Zeichen je Ze
 Werte bereinigt.
 
 `import-maps --refresh DIR --catalogue FILE --source DIR` bringt einen früher importierten Level-Ordner
-(`levels/downloaded`) an Ort und Stelle auf den Stand des Katalogs: die `level.txt` jedes Levels wird aus dem Katalog
+(`levels/user-levels`) an Ort und Stelle auf den Stand des Katalogs: die `level.txt` jedes Levels wird aus dem Katalog
 geschrieben (gesucht nach ihrer Zeile `source =` und dem Ordnernamen; ihr Kommentar, ihre Zeile `source =` und andere
 Zeilen bleiben), und ein Level-Ordner, der kein einzelnes Level ist (keine Karte oder mehrere), oder dessen Karte weder
 im Katalog steht noch eine Readme hat (in ihrem Ordner oder neben ihrer Quelle in der Sammlung `--source DIR`, zu der
