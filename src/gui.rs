@@ -115,8 +115,24 @@ fn remembered() -> (Option<String>, Option<u32>) {
     (value("model").filter(|m| !m.is_empty() && m.len() <= 64), scale)
 }
 
-/// Keeps the model and scale for next time (written beside and moved in; a failure only loses the choice).
-fn remember(model: &str, scale: u32) {
+/// The folder the file chooser was last left in (`dir PATH` line), when it is still a folder.
+fn remembered_dir() -> Option<PathBuf> {
+    use std::io::Read;
+    let mut text = String::new();
+    let plain = std::fs::symlink_metadata(choices_file()).is_ok_and(|m| m.is_file());
+    if plain && let Ok(f) = std::fs::File::open(choices_file()) {
+        let _ = f.take(8192).read_to_string(&mut text);
+    }
+    let dir = text.lines().find_map(|l| l.strip_prefix("dir "))?;
+    let dir = PathBuf::from(dir.trim());
+    dir.is_dir().then_some(dir)
+}
+
+/// Keeps the model, scale and chooser folder for next time (written beside and moved in; a failure only loses the choice).
+fn remember(model: &str, scale: u32, dir: Option<&Path>) {
+    let dir_line = dir
+        .filter(|d| !d.to_string_lossy().contains(['\n', '\r']))
+        .map_or(String::new(), |d| format!("dir {}\n", d.display()));
     let path = choices_file();
     let mut tmp = path.clone().into_os_string();
     tmp.push(".new");
@@ -124,10 +140,64 @@ fn remember(model: &str, scale: u32) {
     let writable = |p: &Path| std::fs::symlink_metadata(p).map_or(true, |m| m.is_file());
     if writable(&path) && writable(&tmp) {
         let _ = std::fs::remove_file(&tmp);
-        if std::fs::write(&tmp, format!("model {model}\nscale {scale}\n")).is_ok() {
+        if std::fs::write(&tmp, format!("model {model}\nscale {scale}\n{dir_line}")).is_ok() {
             let _ = std::fs::rename(&tmp, &path);
         }
     }
+}
+
+/// What a file chooser was opened for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Pick {
+    /// The game copy as a folder.
+    CopyFolder,
+    /// The game copy as a CD image file (.cue, .bin, .iso).
+    CopyImage,
+    /// The folder of downloaded community maps.
+    Maps,
+}
+
+/// Where the chooser starts: the folder the field names (or the folder holding the file it names), else the folder
+/// chosen last; none when neither is there.
+fn start_dir(field: &str, last: Option<&Path>) -> Option<PathBuf> {
+    let typed = PathBuf::from(field.trim());
+    if !typed.as_os_str().is_empty() {
+        if typed.is_dir() {
+            return Some(typed);
+        }
+        if let Some(parent) = typed.parent().filter(|p| p.is_dir()) {
+            return Some(parent.to_path_buf());
+        }
+    }
+    last.filter(|d| d.is_dir()).map(Path::to_path_buf)
+}
+
+/// The folder to remember after a pick: the folder itself, or the one holding the picked file.
+fn dir_of_pick(picked: &Path, folder: bool) -> Option<PathBuf> {
+    if folder { Some(picked.to_path_buf()) } else { picked.parent().map(Path::to_path_buf) }
+}
+
+/// Opens the system's chooser on its own thread (the window keeps drawing); the answer comes through the channel,
+/// none when it was cancelled. A backend that is not there (no portal) ends the thread without an answer.
+fn open_chooser(kind: Pick, title: &str, start: Option<PathBuf>, ctx: &egui::Context) -> Receiver<Option<PathBuf>> {
+    let (send, answer) = channel();
+    let (title, ctx) = (title.to_owned(), ctx.clone());
+    std::thread::spawn(move || {
+        let mut dialog = rfd::FileDialog::new().set_title(title);
+        if let Some(d) = start {
+            dialog = dialog.set_directory(d);
+        }
+        let picked = match kind {
+            Pick::CopyFolder | Pick::Maps => dialog.pick_folder(),
+            Pick::CopyImage => dialog
+                .add_filter("CD image", &["cue", "bin", "iso", "img"])
+                .add_filter("all files", &["*"])
+                .pick_file(),
+        };
+        let _ = send.send(picked);
+        ctx.request_repaint();
+    });
+    answer
 }
 
 /// A run going on: its reports and the flag that stops it.
@@ -147,6 +217,9 @@ struct App {
     /// The folder of downloaded community maps to import.
     maps_field: String,
     job: Option<Job>,
+    /// A file chooser open: what for, and its answer.
+    chooser: Option<(Pick, Receiver<Option<PathBuf>>)>,
+    last_dir: Option<PathBuf>,
     step: Option<(usize, usize, String)>,
     lines: Vec<String>,
     outcome: Option<Result<(), String>>,
@@ -182,6 +255,8 @@ impl App {
             relief: 0.0,
             maps_field: String::new(),
             job: None,
+            chooser: None,
+            last_dir: remembered_dir(),
             step: None,
             lines: Vec::new(),
             outcome: None,
@@ -200,7 +275,8 @@ impl App {
         let cancel = Arc::new(AtomicBool::new(false));
         let (stop, ctx2) = (cancel.clone(), ctx.clone());
         let (scale, model, relief) = (self.scale, self.model.clone(), self.relief);
-        remember(&model, scale);
+        let last_dir = self.last_dir.clone();
+        remember(&model, scale, last_dir.as_deref());
         std::thread::spawn(move || {
             let data = gamedata::assets::Data::new(Some(root));
             let out = gamedata::profile::dir(gamedata::profile::Kind::Remastered);
@@ -273,6 +349,57 @@ impl App {
         self.imported = true;
     }
 
+    /// Opens the chooser for a field.
+    fn browse(&mut self, kind: Pick, ctx: &egui::Context) {
+        if self.chooser.is_some() {
+            return;
+        }
+        let l = self.lang;
+        let (field, title) = match kind {
+            Pick::CopyFolder => (&self.data_field, texts::PICK_COPY.get(l)),
+            Pick::CopyImage => (&self.data_field, texts::PICK_IMAGE.get(l)),
+            Pick::Maps => (&self.maps_field, texts::PICK_MAPS.get(l)),
+        };
+        let start = start_dir(field, self.last_dir.as_deref());
+        self.chooser = Some((kind, open_chooser(kind, title, start, ctx)));
+    }
+
+    /// Takes the chooser's answer: the path fills its field and is checked as a typed one is.
+    fn poll_chooser(&mut self) {
+        let Some((kind, answer)) = &self.chooser else { return };
+        let kind = *kind;
+        let picked = match answer.try_recv() {
+            Ok(p) => p,
+            Err(std::sync::mpsc::TryRecvError::Empty) => return,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                eprintln!("the system's file chooser is not available; type the path instead");
+                None
+            }
+        };
+        self.chooser = None;
+        let Some(path) = picked else { return };
+        if let Some(d) = dir_of_pick(&path, kind != Pick::CopyImage) {
+            self.last_dir = Some(d);
+            remember(&self.model, self.scale, self.last_dir.as_deref());
+        }
+        match kind {
+            Pick::CopyFolder | Pick::CopyImage => {
+                self.data_field = path.display().to_string();
+                self.apply_copy();
+            }
+            Pick::Maps => self.maps_field = path.display().to_string(),
+        }
+    }
+
+    /// Checks the path in the copy field: the folder itself, never another copy found instead of it.
+    fn apply_copy(&mut self) {
+        let typed = PathBuf::from(self.data_field.trim());
+        self.data = gamedata::assets::Data::locate(Some(typed.clone()))
+            .ok()
+            .and_then(|d| d.root)
+            .filter(|root| *root == typed);
+    }
+
     /// Takes what the run has reported since the last frame.
     fn poll(&mut self, ctx: &egui::Context) {
         let Some(job) = &self.job else { return };
@@ -337,6 +464,7 @@ impl eframe::App for App {
         let ctx = root.ctx().clone();
         let ctx = &ctx;
         self.poll(ctx);
+        self.poll_chooser();
         let l = self.lang;
         let busy = self.job.is_some();
         egui::CentralPanel::default().show(root, |ui| {
@@ -364,18 +492,20 @@ impl eframe::App for App {
                     ui.horizontal(|ui| {
                         ui.add_enabled(
                             !busy,
-                            egui::TextEdit::singleline(&mut self.data_field).desired_width(420.0),
+                            egui::TextEdit::singleline(&mut self.data_field).desired_width(300.0),
                         );
                         if ui
                             .add_enabled(!busy, egui::Button::new(texts::USE.get(l)))
                             .clicked()
                         {
-                            // the typed folder itself, never another copy found instead of it
-                            let typed = PathBuf::from(self.data_field.trim());
-                            self.data = gamedata::assets::Data::locate(Some(typed.clone()))
-                                .ok()
-                                .and_then(|d| d.root)
-                                .filter(|root| *root == typed);
+                            self.apply_copy();
+                        }
+                        let free = !busy && self.chooser.is_none();
+                        if ui.add_enabled(free, egui::Button::new(texts::BROWSE.get(l))).clicked() {
+                            self.browse(Pick::CopyFolder, ctx);
+                        }
+                        if ui.add_enabled(free, egui::Button::new(texts::IMAGE.get(l))).clicked() {
+                            self.browse(Pick::CopyImage, ctx);
                         }
                     });
                     ui.end_row();
@@ -479,7 +609,10 @@ impl eframe::App for App {
             // community maps: a downloaded collection sorted into the game's level folders
             ui.label(texts::MAPS.get(l));
             ui.horizontal(|ui| {
-                ui.add_enabled(!busy, egui::TextEdit::singleline(&mut self.maps_field).desired_width(420.0));
+                ui.add_enabled(!busy, egui::TextEdit::singleline(&mut self.maps_field).desired_width(300.0));
+                if ui.add_enabled(!busy && self.chooser.is_none(), egui::Button::new(texts::BROWSE.get(l))).clicked() {
+                    self.browse(Pick::Maps, ctx);
+                }
                 let ready = !busy && !self.maps_field.trim().is_empty();
                 if ui.add_enabled(ready, egui::Button::new(texts::IMPORT.get(l))).clicked() {
                     self.start_import(ctx);
@@ -509,5 +642,29 @@ impl eframe::App for App {
                 }
             });
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn chooser_starts_where_the_field_points() {
+        let tmp = std::env::temp_dir();
+        let t = tmp.display().to_string();
+        assert_eq!(start_dir(&t, None), Some(tmp.clone()));
+        // a file path that is not there: the folder holding it
+        assert_eq!(start_dir(&format!("{t}/no-such-image.cue"), None), Some(tmp.clone()));
+        // nothing typed: the folder chosen last, if it is still a folder
+        assert_eq!(start_dir("  ", Some(&tmp)), Some(tmp.clone()));
+        assert_eq!(start_dir("", Some(Path::new("/no/such/dir/anywhere"))), None);
+        assert_eq!(start_dir("", None), None);
+    }
+
+    #[test]
+    fn remembered_folder_is_the_pick_or_its_parent() {
+        assert_eq!(dir_of_pick(Path::new("/a/b"), true), Some(PathBuf::from("/a/b")));
+        assert_eq!(dir_of_pick(Path::new("/a/b/game.cue"), false), Some(PathBuf::from("/a/b")));
     }
 }

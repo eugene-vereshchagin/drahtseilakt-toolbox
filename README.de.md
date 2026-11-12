@@ -58,6 +58,7 @@ Namen, keine Punkte oder Leerzeichen am Ende, höchstens 40 Zeichen, an einer Wo
 „Hello Mars“ wird „Hello Mars (2)“). Links werden nie verfolgt, Tiefe und Anzahl sind begrenzt, die Quelle wird nur
 gelesen, und jedes Level wird in einen versteckten Ordner geschrieben und an seinen Platz umbenannt. Ein zweiter Lauf
 fügt nur Neues hinzu. Das Fenster hat dasselbe als Feld und Import-Knopf.
+Jedes Pfadfeld im Fenster hat einen Durchsuchen…-Knopf (die Spielkopie auch Abbild… für ein CD-Abbild: .cue, .bin, .iso), der den Systemdialog öffnet; der Pfad wird wie ein getippter geprüft, der Ordner gemerkt. Unter Linux braucht es xdg-desktop-portal mit einem Backend (-gtk, -kde, -gnome); ohne bleibt das Feld zum Tippen.
 Einen Download außerhalb von `levels/downloaded/` entpacken (etwa in Downloads): eine Quelle im Zielordner wird
 abgelehnt. Ein unlesbarer Ordner des Downloads wird übersprungen und genannt; ausgegebene Namen haben ihre
 Steuerzeichen maskiert.
