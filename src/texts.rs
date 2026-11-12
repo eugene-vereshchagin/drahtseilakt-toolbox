@@ -121,10 +121,10 @@ text!(
 );
 text!(
     MAPS,
-    "Community maps: an unpacked download, sorted into levels/downloaded, one folder a level",
-    "Любительские карты: распакованная загрузка — по папкам в levels/downloaded, папка на уровень",
-    "Community-Karten: ein entpackter Download, in levels/downloaded einsortiert, ein Ordner je Level",
-    "自制地图：把下载的合集（已解压）整理到游戏的 levels/downloaded，每个关卡一个文件夹"
+    "Community maps: an unpacked download, sorted into levels/user-levels, one folder a level",
+    "Любительские карты: распакованная загрузка — по папкам в levels/user-levels, папка на уровень",
+    "Community-Karten: ein entpackter Download, in levels/user-levels einsortiert, ein Ordner je Level",
+    "自制地图：把下载的合集（已解压）整理到游戏的 levels/user-levels，每个关卡一个文件夹"
 );
 text!(IMPORT, "Import", "Импортировать", "Importieren", "导入");
 text!(

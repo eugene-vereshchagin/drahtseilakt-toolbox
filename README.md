@@ -16,6 +16,8 @@ drahtseilakt-toolbox import-maps DIR [--to DIR] [--catalogue FILE] [--unsorted D
 drahtseilakt-toolbox import-maps --refresh DIR --catalogue FILE [--source DIR] [--unsorted DIR]
 ```
 
+**Folders (2026-11-12).** The game's `levels/` holds `ballance-original/` (your copy), `ballance-remaster/` (what `remaster` writes) and `user-levels/` (what `import-maps` writes by default; the earlier names `original/`, `remastered/` and `downloaded/` are moved by the game at its first start). A level counts as a level only when it lies in its own named folder that holds either one `.nmo` file or an open-format level, plus the description file `level.txt`: `import-maps` writes exactly that.
+
 `remaster-open` remasters one open-format level folder in place (rounder shapes, larger textures, masonry relief; the plain originals stay in `textures.original/`, so a second run grows nothing twice). `remaster-nmo` makes `FILE.remaster/` beside a community map: its looks and pictures, which the game puts on the map's meshes. The Back to 2004 mod shows both plain.
 
 Started without a command it opens its window (Linux X11 or Wayland, Windows, macOS; it remembers the model and
@@ -24,7 +26,7 @@ scale, the Real-ESRGAN model, the relief, a Make button, the progress per level 
 a texture before and after. Its texts are in English, Russian, German and Simplified Chinese, from the system's
 language or chosen in the window; Chinese uses a font the system has (Noto CJK, Microsoft YaHei, PingFang...).
 
-`remaster` converts the original levels the copy has into the game's `levels/remastered/` (the open format), gives
+`remaster` converts the original levels the copy has into the game's `levels/ballance-remaster/` (the open format), gives
 each level rounder shapes (written into the level beside the original meshes, which the physics keeps using, so runs
 are the same) and makes its textures N times larger (default 4; 1 leaves them). With Real-ESRGAN the textures gain
 detail, else they are resampled with Lanczos (as are textures under 64 pixels, where it would invent detail). Real-ESRGAN is looked for in `realesrgan/` beside the toolbox's
@@ -51,7 +53,7 @@ copied for every part that carries the same one, so the run is shorter and the g
 by an older toolbox have none: run `remaster` again.
 
 `import-maps DIR` sorts a downloaded collection of community maps (an unpacked archive: folders of any depth,
-pictures, documents) into the game's `levels/downloaded/` (or `--to DIR`), in the shape the game lists (the game's
+pictures, documents) into the game's `levels/user-levels/` (or `--to DIR`), in the shape the game lists (the game's
 levels.md, "A level is a folder"): one folder per map with its `.nmo`, its picture beside it as `preview.jpg`/`.png`,
 and a `level.txt` saying where it came from (and its whole title when the folder's name had to lose characters). A
 generic file name (`Level_07.NMO` in "45-Degree Rotated Maps") is named after its collection ("45-Degree Rotated -
@@ -61,7 +63,7 @@ characters cut at a word with "…", a second "Hello Mars" becomes "Hello Mars (
 and counts are capped, the source is only read, and each level is written into a hidden folder and renamed into
 place. A second run adds only what is new. The window has the same as a field and an Import button.
 Each path field in the window has a Browse… button (the game copy also Image… for a CD image: .cue, .bin, .iso) that opens the system's chooser; the path is checked like a typed one and the folder is remembered. On Linux it needs xdg-desktop-portal with a backend (-gtk, -kde, -gnome); without one the field stays typed.
-Unpack a download outside `levels/downloaded/` (in Downloads, say): a source inside the folder it imports into is
+Unpack a download outside `levels/user-levels/` (in Downloads, say): a source inside the folder it imports into is
 refused. A folder of the download that cannot be read is skipped and named; names printed have control characters
 escaped.
 
@@ -83,10 +85,10 @@ the catalogue is imported with the title from its name and no difficulty. The ca
 file: at most 4 MiB, 20 000 rows and 1024 characters a cell, malformed rows skipped, values cleaned.
 
 Sets of modified originals (a folder whose name has 45-degree / rotat, reverse / 反向 or invisible / 隐形) are not community
-maps: `import-maps` puts them into `levels/modified/<Set>/<file stem>/<file>.nmo`, beside `levels/downloaded`, the layout
+maps: `import-maps` puts them into `levels/modified/<Set>/<file stem>/<file>.nmo`, beside `levels/user-levels`, the layout
 the game reads. Pro Racing and other new tracks stay community maps.
 
-`import-maps --refresh DIR --catalogue FILE --source DIR` brings a levels folder imported before (`levels/downloaded`)
+`import-maps --refresh DIR --catalogue FILE --source DIR` brings a levels folder imported before (`levels/user-levels`)
 up to the catalogue in place: each level's `level.txt` is written from the catalogue (looked up by its `source =`
 line and the folder's name; its comment, its `source =` line and other lines are kept), and a level folder that is
 not a single level (no map, or several), or whose map is neither in the catalogue nor has a readme (in its folder, or

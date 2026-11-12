@@ -28,7 +28,7 @@ usage: drahtseilakt-toolbox [<command>] [options]
 Without a command the toolbox opens its window.
 
 commands:
-  remaster            convert the original levels the copy has into levels/remastered (the open format), give
+  remaster            convert the original levels the copy has into levels/ballance-remaster (the open format), give
                       every level there its rounder shapes and make its textures larger; the game lists them in
                       Custom levels. Run it again after a newer toolbox to bring the levels up to date.
                       Brickwork in concrete is told by its colour and drawn with depth (masonry relief).
@@ -44,7 +44,7 @@ commands:
                       is only read. Back to 2004 draws the map as it is.
   relief DIR          make one remastered level folder's relief again (masonry, and --relief if given)
   import-maps DIR     sort a downloaded collection of community maps (an unpacked archive, folders of any depth)
-                      into the game's levels/downloaded: one folder per map with its .nmo, its preview picture
+                      into the game's levels/user-levels: one folder per map with its .nmo, its preview picture
                       and a level.txt with its title; the same map twice becomes one level; packed archives are
                       copied into the unsorted folder, not opened; DIR is only read. --to DIR imports elsewhere.
                       With --catalogue FILE each map found in it gets its English title, Chinese title, author
@@ -53,7 +53,7 @@ commands:
                       it does not support yet in it (plays fully / with differences / may not be passable); the
                       check is kept beside each map as report.txt and shown in the game's list of downloaded maps
   import-maps --refresh DIR --catalogue FILE [--source DIR]
-                      bring a levels folder imported before (levels/downloaded) up to the catalogue in place:
+                      bring a levels folder imported before (levels/user-levels) up to the catalogue in place:
                       level.txt files rewritten from it; level folders that are not one level, or whose map is
                       neither in the catalogue nor has a readme (in the folder, or beside its source in the
                       collection --source DIR, which level.txt's source = line names a path in), moved into the
@@ -69,7 +69,7 @@ options:
   --relief S          give lit textures normal maps of strength S (0 to 20, default 0: none); the relief is
                       guessed from the picture, so every crack and gap is deepened: keep it low (1 to 3)
   --levels LIST       with remaster: only these levels (e.g. 1,7 or Level_01; default: every one)
-  --to DIR            with import-maps: the folder to make the levels in (default the game's levels/downloaded)
+  --to DIR            with import-maps: the folder to make the levels in (default the game's levels/user-levels)
   --catalogue FILE    with import-maps: the community's catalogue (CustomMapList.md of BallanceCustomMaps)
   --unsorted DIR      with import-maps: where what does not fit is set aside, with a README.txt saying why
                       (default community-unsorted beside the levels folder)

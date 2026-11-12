@@ -1323,7 +1323,7 @@ mod tests {
         std::os::unix::fs::symlink(&outside, tmp.join("level.gltf")).unwrap();
         std::os::unix::fs::symlink(&outside, tmp.join("level.bin")).unwrap();
         let data = Data::new(Some(root.clone()));
-        assert_eq!(shapes(&dir, None, &data).unwrap(), 0);
+        assert_eq!(shapes(&dir, None, Some(&data)).unwrap(), 0);
         assert_eq!(std::fs::read(&outside).unwrap(), b"keep");
         assert!(
             std::fs::symlink_metadata(dir.join("level.gltf"))
