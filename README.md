@@ -9,10 +9,14 @@ folders; everything heavy that makes levels look modern lives here, so the game 
 ```
 drahtseilakt-toolbox                     (the window)
 drahtseilakt-toolbox remaster [--levels LIST] [--scale N] [--model NAME] [--relief S] [--data DIR]
+drahtseilakt-toolbox remaster-open DIR [--scale N] [--model NAME] [--relief S]
+drahtseilakt-toolbox remaster-nmo FILE.nmo [--scale N] [--model NAME] [--relief S]
 drahtseilakt-toolbox relief DIR [--scale N] [--relief S]
 drahtseilakt-toolbox import-maps DIR [--to DIR] [--catalogue FILE] [--unsorted DIR]
 drahtseilakt-toolbox import-maps --refresh DIR --catalogue FILE [--source DIR] [--unsorted DIR]
 ```
+
+`remaster-open` remasters one open-format level folder in place (rounder shapes, larger textures, masonry relief; the plain originals stay in `textures.original/`, so a second run grows nothing twice). `remaster-nmo` makes `FILE.remaster/` beside a community map: its looks and pictures, which the game puts on the map's meshes. The Back to 2004 mod shows both plain.
 
 Started without a command it opens its window (Linux X11 or Wayland, Windows, macOS; it remembers the model and
 scale chosen last, in `toolbox.txt` in the game's data folder): your copy of the game, the

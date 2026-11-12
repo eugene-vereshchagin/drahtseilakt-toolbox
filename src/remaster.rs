@@ -210,7 +210,7 @@ pub fn run_in(
         // its parts (balls, transformer, modules) and game files (sky, particles, shadow, sounds) go into its own
         // game folder, remade as it is, so it plays without the copy's level files
         let model = original.as_ref().map(|l| l.level.clone());
-        match shapes(&dir, original.map(|l| l.level), data) {
+        match shapes(&dir, original.map(|l| l.level), Some(data)) {
             Ok(n) => line(
                 &mut out,
                 watch,
@@ -301,6 +301,88 @@ pub fn run_in(
     Ok(out)
 }
 
+/// `remaster-open`: the remaster of one open-format level folder in place (a shipped set's level, a downloaded one):
+/// rounder shapes, textures `factor` times larger from `textures.original/` (kept there; a second run starts from them
+/// again, so nothing is grown twice), masonry relief (and the brightness relief when `relief_strength` > 0) and the
+/// compressed textures. Only looks and pictures change; the level's physics stays what it was. Returns the lines.
+pub fn remaster_folder(dir: &Path, factor: u32, model: &str, relief_strength: f32) -> Result<Vec<String>, String> {
+    if !real_dir(dir) || !real_file(&dir.join("level.gltf")) {
+        return Err(format!("{}: not an open-format level folder", dir.display()));
+    }
+    let mut out = Vec::new();
+    if let Ok(mut m) = GROWN.lock() {
+        m.clear();
+    }
+    if let Ok(mut m) = COMPRESSED.lock() {
+        m.clear();
+    }
+    // the hash the level is known by (what the runs recorded on it carry) is kept before the files change: the
+    // remastered level plays the same, so its runs stay good (the game reads it from level.source)
+    let source = dir.join(gamedata::assets::SOURCE_HASH_FILE);
+    if std::fs::symlink_metadata(&source).is_err() {
+        let hash = gamedata::assets::load_open(dir)?.hash;
+        replace(&source, |t| std::fs::write(t, format!("{hash:016x}\n")).map_err(|e| e.to_string()))?;
+    }
+    let cancel = AtomicBool::new(false);
+    let mut watch = Watch { report: &mut |_| {}, cancel: &cancel };
+    let esrgan = esrgan();
+    if let Some(prog) = &esrgan {
+        has_model(prog, model)?;
+    }
+    let esrgan = esrgan.as_deref().map(|p| (p, model));
+    let n = shapes(dir, None, None)?;
+    out.push(format!("{}: {n} meshes rounder", dir.display()));
+    if factor >= 2 {
+        let n = level(dir, factor, esrgan, &mut out, &mut watch)?;
+        out.push(format!(
+            "{}: {n} textures x{factor} ({})",
+            dir.display(),
+            if esrgan.is_some() { "Real-ESRGAN" } else { "Lanczos" }
+        ));
+    }
+    let n = relief(dir, factor, relief_strength)?;
+    out.push(format!("{}: {n} normal maps", dir.display()));
+    let (n, bytes) = compress(dir, &mut watch)?;
+    out.push(format!("{}: {n} compressed textures ({} MB)", dir.display(), bytes / (1024 * 1024)));
+    Ok(out)
+}
+
+/// `remaster-nmo`: the sidecar `<map>.remaster/` of a community map, made anew from the map each time (one left from
+/// before is removed, links in it never followed), then remastered as an open-format folder. The map is only read; the
+/// game files its scripts or parts need are not copied (the sidecar only gives looks).
+pub fn remaster_nmo(file: &Path, factor: u32, model: &str, relief_strength: f32) -> Result<Vec<String>, String> {
+    if !real_file(file) || file.extension().is_none_or(|e| !e.eq_ignore_ascii_case("nmo")) {
+        return Err(format!("{}: not a .nmo file", file.display()));
+    }
+    // a map made for the original's textures, with no copy: the game's own textures by name, as the game draws it
+    gamedata::packs::choose(gamedata::packs::Kind::Textures, gamedata::packs::OWN);
+    let data = Data::new(None);
+    let mut loaded = data.load(&Source::Nmo(file.to_path_buf()))?;
+    // a texture the map names that the original's copy has and we have an own stand-in for: our own, by name, so the
+    // sidecar carries no picture of the copy (it is shared); the others keep what they are
+    for t in &mut loaded.level.textures {
+        if let level::TextureSource::File(n) = &t.source
+            && let Some(own) = gamedata::resources::own_texture(n)
+            && let Ok(img) = load(&own)
+        {
+            t.source = level::TextureSource::Pixels {
+                width: img.width(),
+                height: img.height(),
+                rgba: img.into_raw(),
+            };
+            t.color_key = None;
+        }
+    }
+    let dir = file.with_extension("remaster");
+    match std::fs::symlink_metadata(&dir) {
+        Ok(m) if m.is_dir() => std::fs::remove_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?,
+        Ok(_) => return Err(format!("{}: is not a folder", dir.display())),
+        Err(_) => {}
+    }
+    gamedata::assets::export(&data, &loaded, &dir, false)?;
+    remaster_folder(&dir, factor, model, relief_strength)
+}
+
 /// Writes a level's parts (the balls, the transformer, its modules) into its game folder, remade as the level is
 /// (rounder shapes, larger textures, relief when asked), and copies the game files it uses (sky, particles, shadow,
 /// sounds) beside them; returns the line that says how it went.
@@ -334,7 +416,7 @@ fn game_files(
             out.push(format!("{}: not remade: {e}", part_dir.display()));
             continue;
         }
-        if let Err(e) = shapes(&part_dir, Some(part.level), data) {
+        if let Err(e) = shapes(&part_dir, Some(part.level), Some(data)) {
             out.push(format!("{}: not remade: {e}", part_dir.display()));
             continue;
         }
@@ -400,18 +482,22 @@ fn real_dirs(root: &Path, dir: &Path) -> Result<(), String> {
 /// what an older one made), and writes the level file beside and moves it into place; `fresh` is the level made anew
 /// from the player's copy, else the folder's own is read. A texture the level names that the folder lacks is written
 /// from the copy. Returns how many meshes got a look.
-fn shapes(dir: &Path, fresh: Option<level::Level>, data: &Data) -> Result<usize, String> {
+fn shapes(dir: &Path, fresh: Option<level::Level>, data: Option<&Data>) -> Result<usize, String> {
     let mut level = match fresh {
         Some(l) => l,
         None => {
             let l = level::open::import(dir)?;
             // read back, its textures are files in the folder; written again they are named as an export names them
             for (i, t) in l.textures.iter().enumerate() {
-                let ours = dir
-                    .join(level::open::texture_file(i, &t.name))
-                    .to_string_lossy()
-                    .into_owned();
-                if !matches!(&t.source, level::TextureSource::File(p) if *p == ours) {
+                let ours = dir.join(level::open::texture_file(i, &t.name));
+                let named = match &t.source {
+                    level::TextureSource::File(p) => *p == ours.to_string_lossy(),
+                    level::TextureSource::LevelFile(p) => *p == ours,
+                    // the game's own texture by name (`game:`): no file of the level's, nothing to name
+                    level::TextureSource::Game(_) => true,
+                    _ => false,
+                };
+                if !named {
                     return Err("its textures are not named as the game exports them".into());
                 }
             }
@@ -426,7 +512,7 @@ fn shapes(dir: &Path, fresh: Option<level::Level>, data: &Data) -> Result<usize,
         if std::fs::symlink_metadata(&path).is_ok() || !real_dir(&textures) {
             continue;
         }
-        if let Some((w, h, rgba)) = data.texture(t) {
+        if let Some((w, h, rgba)) = data.and_then(|d| d.texture(t)) {
             replace(&path, |tmp| {
                 image::save_buffer_with_format(
                     tmp,
