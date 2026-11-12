@@ -316,6 +316,13 @@ pub fn remaster_folder(dir: &Path, factor: u32, model: &str, relief_strength: f3
     if let Ok(mut m) = COMPRESSED.lock() {
         m.clear();
     }
+    // the hash the level is known by (what the runs recorded on it carry) is kept before the files change: the
+    // remastered level plays the same, so its runs stay good (the game reads it from level.source)
+    let source = dir.join(gamedata::assets::SOURCE_HASH_FILE);
+    if std::fs::symlink_metadata(&source).is_err() {
+        let hash = gamedata::assets::load_open(dir)?.hash;
+        replace(&source, |t| std::fs::write(t, format!("{hash:016x}\n")).map_err(|e| e.to_string()))?;
+    }
     let cancel = AtomicBool::new(false);
     let mut watch = Watch { report: &mut |_| {}, cancel: &cancel };
     let esrgan = esrgan();
@@ -486,6 +493,8 @@ fn shapes(dir: &Path, fresh: Option<level::Level>, data: Option<&Data>) -> Resul
                 let named = match &t.source {
                     level::TextureSource::File(p) => *p == ours.to_string_lossy(),
                     level::TextureSource::LevelFile(p) => *p == ours,
+                    // the game's own texture by name (`game:`): no file of the level's, nothing to name
+                    level::TextureSource::Game(_) => true,
                     _ => false,
                 };
                 if !named {
