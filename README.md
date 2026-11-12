@@ -56,6 +56,7 @@ names are made safe for Linux, Windows and macOS (no reserved names, no trailing
 characters cut at a word with "…", a second "Hello Mars" becomes "Hello Mars (2)"). Links are never followed, depth
 and counts are capped, the source is only read, and each level is written into a hidden folder and renamed into
 place. A second run adds only what is new. The window has the same as a field and an Import button.
+Each path field in the window has a Browse… button (the game copy also Image… for a CD image: .cue, .bin, .iso) that opens the system's chooser; the path is checked like a typed one and the folder is remembered. On Linux it needs xdg-desktop-portal with a backend (-gtk, -kde, -gnome); without one the field stays typed.
 Unpack a download outside `levels/downloaded/` (in Downloads, say): a source inside the folder it imports into is
 refused. A folder of the download that cannot be read is skipped and named; names printed have control characters
 escaped.

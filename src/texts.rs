@@ -80,6 +80,11 @@ text!(
     "Nicht gefunden: gib den Ballance-Ordner an (oder importiere ihn zuerst mit dem Spiel).",
     "未找到：请填写 Ballance 文件夹（或先用游戏导入）。"
 );
+text!(BROWSE, "Browse…", "Обзор…", "Durchsuchen…", "浏览…");
+text!(IMAGE, "Image…", "Образ…", "Abbild…", "镜像…");
+text!(PICK_COPY, "Choose the game's folder", "Выберите папку с игрой", "Spielordner wählen", "选择游戏文件夹");
+text!(PICK_IMAGE, "Choose the CD image (.cue, .bin, .iso)", "Выберите образ диска (.cue, .bin, .iso)", "CD-Abbild wählen (.cue, .bin, .iso)", "选择光盘镜像（.cue、.bin、.iso）");
+text!(PICK_MAPS, "Choose the folder of downloaded maps", "Выберите папку со скачанными картами", "Ordner mit heruntergeladenen Karten wählen", "选择已下载地图的文件夹");
 text!(USE, "Use", "Выбрать", "Übernehmen", "使用");
 text!(OUTPUT, "Levels are made into", "Уровни будут в папке", "Die Level entstehen in", "关卡将生成到");
 text!(SCALE, "Textures larger by", "Увеличить текстуры в", "Texturen größer um", "纹理放大倍数");

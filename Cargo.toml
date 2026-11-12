@@ -24,6 +24,8 @@ serde_json = "=1.0.154"
 # the window: egui on wgpu (as the game draws), X11 and Wayland, egui's own fonts; no links (nothing opens a browser),
 # no system font provider (the window finds a font itself, never downloads one)
 eframe = { version = "=0.37.0", default-features = false, features = ["wgpu", "x11", "wayland", "default_fonts"] }
+# the system's file chooser (folder or CD image): the desktop portal on Linux, native on Windows and macOS; no GTK
+rfd = { version = "=0.17.2", default-features = false, features = ["xdg-portal"] }
 
 [lints.rust]
 unsafe_code = "forbid"
