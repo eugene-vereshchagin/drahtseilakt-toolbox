@@ -103,7 +103,7 @@ Die Toolbox geht nie online und fasst die Originalkopie des Spielers nie an.
 ## Bauen
 
 Das Lesen der Level teilt die Toolbox mit dem Spiel: Sie braucht einen Klon des Spiel-Repositorys daneben, unter
-`../ballance/drahtseilakt`. Dann `cargo build --release --offline`. Für Real-ESRGAN den festgelegten Download nach
+`../drahtseilakt`. Dann `cargo build --release --offline`. Für Real-ESRGAN den festgelegten Download nach
 `third_party/realesrgan/` entpacken und `target/release/realesrgan` darauf verlinken.
 
 ## Wer es gemacht hat

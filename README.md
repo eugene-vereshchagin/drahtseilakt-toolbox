@@ -102,7 +102,7 @@ The toolbox never goes online and never touches the player's original copy.
 ## Building
 
 The toolbox shares the level reading with the game: it needs a checkout of the game's repository beside this one,
-at `../ballance/drahtseilakt`. Then `cargo build --release --offline`. For Real-ESRGAN, unpack the pinned download
+at `../drahtseilakt`. Then `cargo build --release --offline`. For Real-ESRGAN, unpack the pinned download
 into `third_party/realesrgan/` and link `target/release/realesrgan` to it.
 
 ## Who made it

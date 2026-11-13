@@ -98,7 +98,7 @@ Toolbox никогда не выходит в сеть и не трогает о
 
 ## Сборка
 
-Чтение уровней у toolbox общее с игрой: нужен клон репозитория игры рядом, в `../ballance/drahtseilakt`. Затем
+Чтение уровней у toolbox общее с игрой: нужен клон репозитория игры рядом, в `../drahtseilakt`. Затем
 `cargo build --release --offline`. Для Real-ESRGAN распакуйте закреплённый архив в `third_party/realesrgan/` и
 сделайте ссылку `target/release/realesrgan` на эту папку.
 

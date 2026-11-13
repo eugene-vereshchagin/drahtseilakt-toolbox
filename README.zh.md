@@ -37,7 +37,7 @@ toolbox 从不联网，也从不改动玩家的原版拷贝。
 
 ## 构建
 
-toolbox 与游戏共用关卡读取代码：需要在旁边的 `../ballance/drahtseilakt` 放一份游戏仓库的克隆。然后执行 `cargo build --release --offline`。若要使用 Real-ESRGAN，把固定版本的下载包解压到 `third_party/realesrgan/`，并把 `target/release/realesrgan` 链接到该目录。
+toolbox 与游戏共用关卡读取代码：需要在旁边的 `../drahtseilakt` 放一份游戏仓库的克隆。然后执行 `cargo build --release --offline`。若要使用 Real-ESRGAN，把固定版本的下载包解压到 `third_party/realesrgan/`，并把 `target/release/realesrgan` 链接到该目录。
 
 ## 谁做的
 

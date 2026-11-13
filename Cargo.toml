@@ -16,8 +16,8 @@ name = "drahtseilakt-toolbox"
 path = "src/main.rs"
 
 [dependencies]
-gamedata = { path = "../ballance/drahtseilakt/crates/gamedata" }
-level = { path = "../ballance/drahtseilakt/crates/level" }
+gamedata = { path = "../drahtseilakt/crates/gamedata" }
+level = { path = "../drahtseilakt/crates/level" }
 glam = "=0.34.1"
 image = { version = "=0.25.10", default-features = false, features = ["bmp", "tga", "png", "jpeg"] }
 serde_json = "=1.0.154"

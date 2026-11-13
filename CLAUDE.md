@@ -1,6 +1,6 @@
 # drahtseilakt-toolbox — working rules
 
-The toolbox prepares levels for the game Drahtseilakt (the repository beside this one, `../ballance/drahtseilakt`,
+The toolbox prepares levels for the game Drahtseilakt (the repository beside this one, `../drahtseilakt`,
 whose CLAUDE.md, roadmap and decisions apply here too; the decision "The toolbox prepares levels; the game only
 plays" is why this program exists). Owner: Veresk. Chat in Russian; code, comments, docs and commits in English.
 
