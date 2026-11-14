@@ -24,8 +24,13 @@ Ohne Befehl gestartet öffnet die Toolbox ihr Fenster (Linux X11 oder Wayland, W
 der letzten Wahl merkt es sich in `toolbox.txt` im Datenordner des Spiels): deine Kopie des
 Spiels, die Vergrößerung, das Real-ESRGAN-Modell, das Relief, ein Knopf Erstellen, der Fortschritt je Level und Teil
 mit Abbrechen, das Ergebnis und eine Textur vorher und nachher. Die Texte gibt es auf Englisch, Russisch, Deutsch
-und vereinfachtem Chinesisch, nach der Systemsprache oder im Fenster gewählt; Chinesisch nutzt eine Schrift des
-Systems (Noto CJK, Microsoft YaHei, PingFang...).
+und vereinfachtem Chinesisch, nach der Systemsprache oder im Fenster gewählt. Das Fenster sieht aus wie das eigene
+Menü des Spiels (Abendhimmel, gerahmte dunkle Tafeln, Pillenknöpfe mit Kugel, die Tektur-Schrift des Spiels) und
+wird von der Toolbox selbst gezeichnet: Es braucht keine Kopie und bringt keine Bilder mit. Seine zwei Abschnitte
+sind „Remaster der Original-Level“ und „Community-Karten importieren“, jeder mit einem Hauptknopf; das
+Real-ESRGAN-Modell und das Relief liegen eingeklappt unter „Erweitert“. Tektur und Noto Sans (die Schriften des
+Spiels, SIL OFL) sind eingebaut; Chinesisch nutzt Noto Sans SC des Spiels, wenn dessen `assets/` neben dem Programm
+liegt, sonst eine Schrift des Systems (Noto CJK, Microsoft YaHei, PingFang...).
 
 `remaster` wandelt die Original-Level der Kopie nach `levels/ballance-remaster/` des Spiels (offenes Format), gibt jedem
 Level rundere Formen (ins Level neben die ursprünglichen Meshes geschrieben, die die Physik weiter benutzt, sodass

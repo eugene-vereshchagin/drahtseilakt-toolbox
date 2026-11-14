@@ -1,41 +1,24 @@
-// The toolbox's window (egui on wgpu, as the game draws): where the player's copy is, how the levels are to be
-// remastered, a Make button, and the run's progress, result and a texture before and after. The run goes on a worker
-// thread and reports through a channel, so the window stays responsive, and Cancel stops it between textures. Texts
-// come from texts.rs in the system's language, switchable; a font for Chinese is taken from the system (never
-// downloaded), else the window keeps egui's own fonts (Latin, Cyrillic, Greek).
+// The toolbox's window (egui on wgpu, as the game draws), in the look of the game's own menu (theme.rs): two sections,
+// "Remaster the original levels" (where the player's copy is, how much larger the textures get, the technical
+// settings folded under Advanced, a Make button) and "Import community maps" (the folder, an Import button), then
+// the run's progress, result and a texture before and after. The run goes on a worker thread and reports through a
+// channel, so the window stays responsive, and Cancel stops it between textures. Texts come from texts.rs in the
+// system's language, switchable.
 
 use crate::remaster::{self, Progress, Watch};
 use crate::texts::{self, LANGS, Lang};
+use crate::theme;
 use eframe::egui;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::{Receiver, channel};
 
-/// The largest font file read, and the largest preview side.
-const FONT_MAX: u64 = 64 * 1024 * 1024;
+/// The largest preview side.
 const PREVIEW_SIDE: u32 = 256;
-
-/// Fonts that cover Chinese, where systems keep them (Linux, Windows, macOS); the first one there is used.
-#[cfg(windows)]
-const CJK_FONTS: &[&str] = &[
-    "C:\\Windows\\Fonts\\msyh.ttc",
-    "C:\\Windows\\Fonts\\simsun.ttc",
-];
-#[cfg(target_os = "macos")]
-const CJK_FONTS: &[&str] = &[
-    "/System/Library/Fonts/PingFang.ttc",
-    "/Library/Fonts/Arial Unicode.ttf",
-];
-#[cfg(not(any(windows, target_os = "macos")))]
-const CJK_FONTS: &[&str] = &[
-    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-    "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
-    "/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc",
-    "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
-    "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
-    "/usr/share/fonts/wenquanyi/wqy-microhei/wqy-microhei.ttc",
-];
+/// The widest the window's column of sections gets, and its margin to the window's edge.
+const COLUMN_MAX: f32 = 660.0;
+const COLUMN_MARGIN: f32 = 28.0;
 
 /// Opens the window; returns when it is closed.
 pub fn run(data_dir: Option<PathBuf>) -> Result<(), String> {
@@ -49,47 +32,11 @@ pub fn run(data_dir: Option<PathBuf>) -> Result<(), String> {
         "drahtseilakt-toolbox",
         options,
         Box::new(move |cc| {
-            add_system_font(&cc.egui_ctx);
+            theme::apply(&cc.egui_ctx);
             Ok(Box::new(App::new(data_dir)))
         }),
     )
     .map_err(|e| e.to_string())
-}
-
-/// Adds a system font with Chinese after egui's own, for the texts they lack.
-fn add_system_font(ctx: &egui::Context) {
-    let Some(bytes) = CJK_FONTS.iter().find_map(|p| read_font(Path::new(p))) else {
-        return;
-    };
-    let mut fonts = egui::FontDefinitions::default();
-    fonts.font_data.insert(
-        "system-cjk".into(),
-        Arc::new(egui::FontData::from_owned(bytes)),
-    );
-    for family in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
-        fonts
-            .families
-            .entry(family)
-            .or_default()
-            .push("system-cjk".into());
-    }
-    ctx.set_fonts(fonts);
-}
-
-/// A font file: a plain one, not too big.
-fn read_font(path: &Path) -> Option<Vec<u8>> {
-    use std::io::Read;
-    // the system's fonts are often links (fontconfig): followed, but the file read is a plain one through a cap
-    if !std::fs::metadata(path).is_ok_and(|m| m.is_file()) {
-        return None;
-    }
-    let mut bytes = Vec::new();
-    std::fs::File::open(path)
-        .ok()?
-        .take(FONT_MAX.saturating_add(1))
-        .read_to_end(&mut bytes)
-        .ok()?;
-    (u64::try_from(bytes.len()).ok()? <= FONT_MAX).then_some(bytes)
 }
 
 /// Where the window keeps its last choices: the game's data folder (the remastered levels' home too).
@@ -214,6 +161,10 @@ struct App {
     models: Vec<String>,
     model: String,
     relief: f32,
+    /// The technical settings (the model, the relief) are shown.
+    advanced: bool,
+    /// The result is to be scrolled into view (a run has started or ended).
+    reveal: bool,
     /// The folder of downloaded community maps to import.
     maps_field: String,
     job: Option<Job>,
@@ -253,6 +204,8 @@ impl App {
             models,
             model,
             relief: 0.0,
+            advanced: false,
+            reveal: false,
             maps_field: String::new(),
             job: None,
             chooser: None,
@@ -306,6 +259,7 @@ impl App {
             ctx2.request_repaint();
         });
         self.job = Some(Job { reports, cancel });
+        self.reveal = true;
         self.lines.clear();
         self.step = None;
         self.outcome = None;
@@ -343,6 +297,7 @@ impl App {
             ctx2.request_repaint();
         });
         self.job = Some(Job { reports, cancel });
+        self.reveal = true;
         self.lines.clear();
         self.step = None;
         self.outcome = None;
@@ -438,6 +393,7 @@ impl App {
         }
         if let Some(f) = finished {
             self.outcome = Some(f);
+            self.reveal = true;
             self.job = None;
         }
     }
@@ -459,189 +415,318 @@ fn thumb(ctx: &egui::Context, path: &Path, name: &str) -> Option<egui::TextureHa
     Some(ctx.load_texture(name, color, egui::TextureOptions::NEAREST))
 }
 
+/// A path field with its buttons: on one line when the panel is wide, the buttons under the field when it is
+/// narrow. Returns whether Enter was pressed in the field, and the button clicked.
+fn path_row(ui: &mut egui::Ui, field: &mut String, enabled: bool, buttons: &[(&str, bool)]) -> (bool, Option<usize>) {
+    let mut clicked = None;
+    let mut entered = false;
+    let mut edit = |ui: &mut egui::Ui, width: f32| {
+        let text = egui::TextEdit::singleline(field)
+            .desired_width(width)
+            .margin(egui::Margin::symmetric(10, 5));
+        let r = ui.add_enabled(enabled, text);
+        entered = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+    };
+    if buttons.len() > 1 && ui.available_width() < 540.0 {
+        edit(ui, ui.available_width());
+        ui.horizontal(|ui| {
+            for (k, (text, on)) in buttons.iter().enumerate() {
+                if theme::button(ui, text, *on).clicked() {
+                    clicked = Some(k);
+                }
+            }
+        });
+    } else {
+        ui.horizontal(|ui| {
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                for (k, (text, on)) in buttons.iter().enumerate().rev() {
+                    if theme::button(ui, text, *on).clicked() {
+                        clicked = Some(k);
+                    }
+                }
+                edit(ui, ui.available_width());
+            });
+        });
+    }
+    (entered, clicked)
+}
+
+/// A small label over a field: what the field is.
+fn caption(ui: &mut egui::Ui, text: &str) {
+    ui.label(egui::RichText::new(text).color(theme::TEXT_WEAK));
+}
+
+impl App {
+    /// The first section: the player's copy, the scale, the technical settings, Make (Cancel while it runs).
+    fn remaster_section(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        let l = self.lang;
+        let busy = self.job.is_some();
+        theme::heading(ui, texts::REMASTER_TITLE.get(l), 17.0, theme::GOLD, false);
+        caption(ui, texts::INTRO.get(l));
+        ui.add_space(2.0);
+        ui.label(texts::COPY.get(l));
+        let free = !busy && self.chooser.is_none();
+        let buttons = [
+            (texts::USE.get(l), !busy),
+            (texts::BROWSE.get(l), free),
+            (texts::IMAGE.get(l), free),
+        ];
+        let (entered, clicked) = path_row(ui, &mut self.data_field, !busy, &buttons);
+        match clicked {
+            Some(0) => self.apply_copy(),
+            Some(1) => self.browse(Pick::CopyFolder, ctx),
+            Some(2) => self.browse(Pick::CopyImage, ctx),
+            _ if entered => self.apply_copy(),
+            _ => {}
+        }
+        if self.data.is_none() {
+            ui.colored_label(theme::ERROR, texts::NO_COPY.get(l));
+        }
+        ui.horizontal_wrapped(|ui| {
+            caption(ui, texts::OUTPUT.get(l));
+            let out = gamedata::profile::dir(gamedata::profile::Kind::Remastered);
+            caption(ui, &out.display().to_string());
+        });
+        theme::rule(ui);
+
+        ui.horizontal_wrapped(|ui| {
+            ui.label(texts::SCALE.get(l));
+            ui.add_enabled(!busy, egui::Slider::new(&mut self.scale, 1..=8).suffix("×"));
+        });
+        theme::fold(ui, texts::ADVANCED.get(l), &mut self.advanced);
+        if self.advanced {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(texts::MODEL.get(l));
+                if self.models.is_empty() {
+                    caption(ui, texts::LANCZOS.get(l));
+                } else {
+                    ui.add_enabled_ui(!busy, |ui| {
+                        egui::ComboBox::from_id_salt("model")
+                            .selected_text(self.model.as_str())
+                            .width(200.0)
+                            .show_ui(ui, |ui| {
+                                for m in &self.models {
+                                    ui.selectable_value(&mut self.model, m.clone(), m.as_str());
+                                }
+                            });
+                    });
+                }
+            });
+            ui.horizontal_wrapped(|ui| {
+                ui.label(texts::RELIEF.get(l));
+                ui.add_enabled(!busy, egui::Slider::new(&mut self.relief, 0.0..=8.0).step_by(0.5));
+            });
+            if self.relief > 0.0 {
+                ui.colored_label(theme::GOLD, texts::RELIEF_WARN.get(l));
+            }
+        }
+        ui.add_space(4.0);
+        if busy && !self.imported {
+            self.cancel_button(ui);
+        } else if theme::main_button(ui, texts::MAKE.get(l), !busy && self.data.is_some()).clicked() {
+            self.imported = false;
+            self.start(ctx);
+        }
+    }
+
+    /// The second section: the folder of downloaded maps and Import (Cancel while it runs).
+    fn maps_section(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        let l = self.lang;
+        let busy = self.job.is_some();
+        theme::heading(ui, texts::MAPS_TITLE.get(l), 17.0, theme::GOLD, false);
+        caption(ui, texts::MAPS.get(l));
+        ui.add_space(2.0);
+        let buttons = [(texts::BROWSE.get(l), !busy && self.chooser.is_none())];
+        let (_, clicked) = path_row(ui, &mut self.maps_field, !busy, &buttons);
+        if clicked == Some(0) {
+            self.browse(Pick::Maps, ctx);
+        }
+        ui.add_space(4.0);
+        let ready = !busy && !self.maps_field.trim().is_empty();
+        if busy && self.imported {
+            self.cancel_button(ui);
+        } else if theme::main_button(ui, texts::IMPORT.get(l), ready).clicked() {
+            self.start_import(ctx);
+        }
+    }
+
+    /// Cancel in the place of the running section's button; once pressed, what the run still finishes.
+    fn cancel_button(&mut self, ui: &mut egui::Ui) {
+        let l = self.lang;
+        let Some(job) = &self.job else { return };
+        if job.cancel.load(std::sync::atomic::Ordering::Relaxed) {
+            ui.vertical_centered(|ui| ui.label(texts::CANCELLING.get(l)));
+        } else if theme::main_button(ui, texts::CANCEL.get(l), true).clicked() {
+            job.cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+
+    /// The third section, once there is something to show: the progress, the outcome, the run's lines and the last
+    /// texture before and after.
+    fn result_section(&mut self, ui: &mut egui::Ui) {
+        let l = self.lang;
+        let busy = self.job.is_some();
+        theme::heading(ui, texts::RESULT.get(l), 17.0, theme::GOLD, false);
+        if let Some((done, total, what)) = &self.step {
+            let part = if *total > 0 { *done as f32 / *total as f32 } else { 0.0 };
+            theme::progress(ui, part, &format!("{done} / {total}"));
+            if busy {
+                ui.horizontal(|ui| {
+                    ui.add(egui::Spinner::new().size(14.0).color(theme::GOLD));
+                    ui.add(egui::Label::new(format!("{} {what}", texts::WORKING.get(l))).wrap());
+                });
+            }
+        } else if busy {
+            ui.add(egui::Spinner::new().size(14.0).color(theme::GOLD));
+        }
+        match &self.outcome {
+            Some(Ok(())) => {
+                ui.label(egui::RichText::new(texts::DONE.get(l)).strong().color(theme::GOLD));
+                ui.label(if self.imported { texts::PLAY_MAPS.get(l) } else { texts::PLAY.get(l) });
+            }
+            Some(Err(e)) => {
+                ui.colored_label(theme::ERROR, format!("{} {e}", texts::FAILED.get(l)));
+            }
+            None => {}
+        }
+        if !self.lines.is_empty() {
+            theme::rule(ui);
+            egui::ScrollArea::vertical()
+                .id_salt("lines")
+                .max_height(150.0)
+                .auto_shrink([false, true])
+                .stick_to_bottom(true)
+                .show(ui, |ui| {
+                    for line in &self.lines {
+                        ui.label(egui::RichText::new(line).small().color(theme::TEXT_WEAK));
+                    }
+                });
+        }
+        if let Some((before, after)) = &self.preview {
+            theme::rule(ui);
+            caption(ui, texts::PREVIEW.get(l));
+            ui.horizontal_wrapped(|ui| {
+                let side = ((ui.available_width() - 12.0) / 2.0).clamp(96.0, 200.0);
+                theme::framed_image(ui, before, side);
+                theme::framed_image(ui, after, side);
+            });
+        }
+    }
+}
+
 impl eframe::App for App {
     fn ui(&mut self, root: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = root.ctx().clone();
         let ctx = &ctx;
+        #[cfg(debug_assertions)]
+        self.demo(ctx);
         self.poll(ctx);
         self.poll_chooser();
-        let l = self.lang;
-        let busy = self.job.is_some();
-        egui::CentralPanel::default().show(root, |ui| {
-            ui.horizontal(|ui| {
-                ui.heading(texts::TITLE.get(l));
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    egui::ComboBox::from_id_salt("lang")
-                        .selected_text(LANGS.iter().find(|x| x.0 == l).map_or("", |x| x.1))
-                        .show_ui(ui, |ui| {
-                            for (lang, name) in LANGS {
-                                ui.selectable_value(&mut self.lang, lang, name);
-                            }
-                        });
-                    ui.label(texts::LANGUAGE.get(l));
-                });
-            });
-            ui.label(texts::INTRO.get(l));
-            ui.separator();
-
-            egui::Grid::new("settings")
-                .num_columns(2)
-                .spacing([12.0, 8.0])
-                .show(ui, |ui| {
-                    ui.label(texts::COPY.get(l));
-                    ui.horizontal(|ui| {
-                        ui.add_enabled(
-                            !busy,
-                            egui::TextEdit::singleline(&mut self.data_field).desired_width(300.0),
-                        );
-                        if ui
-                            .add_enabled(!busy, egui::Button::new(texts::USE.get(l)))
-                            .clicked()
-                        {
-                            self.apply_copy();
-                        }
-                        let free = !busy && self.chooser.is_none();
-                        if ui.add_enabled(free, egui::Button::new(texts::BROWSE.get(l))).clicked() {
-                            self.browse(Pick::CopyFolder, ctx);
-                        }
-                        if ui.add_enabled(free, egui::Button::new(texts::IMAGE.get(l))).clicked() {
-                            self.browse(Pick::CopyImage, ctx);
-                        }
-                    });
-                    ui.end_row();
-                    if self.data.is_none() {
-                        ui.label("");
-                        ui.colored_label(egui::Color32::LIGHT_RED, texts::NO_COPY.get(l));
-                        ui.end_row();
-                    }
-
-                    ui.label(texts::OUTPUT.get(l));
-                    ui.label(
-                        gamedata::profile::dir(gamedata::profile::Kind::Remastered)
-                            .display()
-                            .to_string(),
-                    );
-                    ui.end_row();
-
-                    ui.label(texts::SCALE.get(l));
-                    ui.add_enabled(!busy, egui::Slider::new(&mut self.scale, 1..=8).suffix("×"));
-                    ui.end_row();
-
-                    ui.label(texts::MODEL.get(l));
-                    if self.models.is_empty() {
-                        ui.label(texts::LANCZOS.get(l));
-                    } else {
-                        ui.add_enabled_ui(!busy, |ui| {
-                            egui::ComboBox::from_id_salt("model")
-                                .selected_text(self.model.as_str())
+        egui::CentralPanel::default().frame(egui::Frame::NONE).show(root, |ui| {
+            let column = (ui.available_width() - 2.0 * COLUMN_MARGIN).clamp(200.0, COLUMN_MAX);
+            theme::backdrop(ui, column + 28.0);
+            egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+                let side = ((ui.available_width() - column) / 2.0).max(0.0);
+                ui.horizontal(|ui| {
+                    ui.add_space(side);
+                    ui.vertical(|ui| {
+                        ui.set_width(column);
+                        ui.add_space(10.0);
+                        let l = self.lang;
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            egui::ComboBox::from_id_salt("lang")
+                                .selected_text(LANGS.iter().find(|x| x.0 == l).map_or("", |x| x.1))
                                 .show_ui(ui, |ui| {
-                                    for m in &self.models {
-                                        ui.selectable_value(&mut self.model, m.clone(), m.as_str());
+                                    for (lang, name) in LANGS {
+                                        ui.selectable_value(&mut self.lang, lang, name);
                                     }
                                 });
+                            ui.label(texts::LANGUAGE.get(l));
                         });
-                    }
-                    ui.end_row();
-
-                    ui.label(texts::RELIEF.get(l));
-                    ui.add_enabled(
-                        !busy,
-                        egui::Slider::new(&mut self.relief, 0.0..=8.0).step_by(0.5),
-                    );
-                    ui.end_row();
-                });
-            if self.relief > 0.0 {
-                ui.colored_label(
-                    egui::Color32::from_rgb(230, 170, 60),
-                    texts::RELIEF_WARN.get(l),
-                );
-            }
-            ui.add_space(8.0);
-
-            ui.horizontal(|ui| {
-                if busy {
-                    let cancelling = self
-                        .job
-                        .as_ref()
-                        .is_some_and(|j| j.cancel.load(std::sync::atomic::Ordering::Relaxed));
-                    if cancelling {
-                        ui.label(texts::CANCELLING.get(l));
-                    } else if ui.button(texts::CANCEL.get(l)).clicked()
-                        && let Some(j) = &self.job
-                    {
-                        j.cancel.store(true, std::sync::atomic::Ordering::Relaxed);
-                    }
-                    ui.spinner();
-                } else if ui
-                    .add_enabled(self.data.is_some(), egui::Button::new(texts::MAKE.get(l)))
-                    .clicked()
-                {
-                    self.imported = false;
-                    self.start(ctx);
-                }
-            });
-            if let Some((done, total, what)) = &self.step {
-                let part = if *total > 0 {
-                    *done as f32 / *total as f32
-                } else {
-                    0.0
-                };
-                ui.add(egui::ProgressBar::new(part).text(format!("{done} / {total}")));
-                if busy {
-                    ui.label(format!("{} {what}", texts::WORKING.get(l)));
-                }
-            }
-            match &self.outcome {
-                Some(Ok(())) => {
-                    ui.label(texts::DONE.get(l));
-                    ui.label(if self.imported { texts::PLAY_MAPS.get(l) } else { texts::PLAY.get(l) });
-                }
-                Some(Err(e)) => {
-                    ui.colored_label(
-                        egui::Color32::LIGHT_RED,
-                        format!("{} {e}", texts::FAILED.get(l)),
-                    );
-                }
-                None => {}
-            }
-            ui.separator();
-
-            // community maps: a downloaded collection sorted into the game's level folders
-            ui.label(texts::MAPS.get(l));
-            ui.horizontal(|ui| {
-                ui.add_enabled(!busy, egui::TextEdit::singleline(&mut self.maps_field).desired_width(300.0));
-                if ui.add_enabled(!busy && self.chooser.is_none(), egui::Button::new(texts::BROWSE.get(l))).clicked() {
-                    self.browse(Pick::Maps, ctx);
-                }
-                let ready = !busy && !self.maps_field.trim().is_empty();
-                if ui.add_enabled(ready, egui::Button::new(texts::IMPORT.get(l))).clicked() {
-                    self.start_import(ctx);
-                }
-            });
-            ui.separator();
-
-            ui.columns(2, |cols| {
-                if let Some(ui) = cols.get_mut(0) {
-                    ui.label(texts::RESULT.get(l));
-                    egui::ScrollArea::vertical()
-                        .id_salt("lines")
-                        .stick_to_bottom(true)
-                        .show(ui, |ui| {
-                            for line in &self.lines {
-                                ui.label(egui::RichText::new(line).small());
+                        theme::heading(ui, texts::TITLE.get(l), 24.0, egui::Color32::WHITE, true);
+                        ui.add_space(6.0);
+                        theme::panel(ui, |ui| self.remaster_section(ui, ctx));
+                        ui.add_space(4.0);
+                        theme::panel(ui, |ui| self.maps_section(ui, ctx));
+                        let shown = self.job.is_some()
+                            || self.step.is_some()
+                            || self.outcome.is_some()
+                            || !self.lines.is_empty()
+                            || self.preview.is_some();
+                        if shown {
+                            ui.add_space(4.0);
+                            let result = ui.scope(|ui| theme::panel(ui, |ui| self.result_section(ui)));
+                            if std::mem::take(&mut self.reveal) {
+                                result.response.scroll_to_me(Some(egui::Align::BOTTOM));
                             }
-                        });
-                }
-                if let (Some(ui), Some((before, after))) = (cols.get_mut(1), &self.preview) {
-                    ui.label(texts::PREVIEW.get(l));
-                    ui.horizontal(|ui| {
-                        let side = egui::vec2(160.0, 160.0);
-                        ui.add(egui::Image::new(before).fit_to_exact_size(side));
-                        ui.add(egui::Image::new(after).fit_to_exact_size(side));
+                        }
+                        ui.add_space(16.0);
                     });
-                }
+                });
             });
         });
+    }
+}
+
+/// A made-up state of the window, for looking at it without a run (debug builds only): `TOOLBOX_DEMO` holds any of
+/// `busy`, `done`, `failed`, `nocopy`, `advanced`, `narrow`, `chosen`, split by commas.
+#[cfg(debug_assertions)]
+impl App {
+    fn demo(&mut self, ctx: &egui::Context) {
+        static ONCE: std::sync::Once = std::sync::Once::new();
+        let mut first = false;
+        ONCE.call_once(|| first = true);
+        let Some(words) = std::env::var("TOOLBOX_DEMO").ok().filter(|_| first) else { return };
+        let has = |w: &str| words.split(',').any(|x| x == w);
+        if has("nocopy") {
+            self.data = None;
+            self.data_field.clear();
+        }
+        if has("advanced") {
+            self.advanced = true;
+            self.relief = 2.0;
+        }
+        if has("chosen") {
+            theme::SHOW_CHOSEN.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+        if has("narrow") {
+            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(560.0, 480.0)));
+        }
+        if has("busy") || has("done") || has("failed") {
+            self.reveal = true;
+            self.step = Some((37, 120, "Level_03: Floor_Top_Profil.bmp".to_owned()));
+            self.lines = (1..=9).map(|n| format!("Level_{n:02}: 214 meshes rounded, 38 textures 4× larger")).collect();
+            self.maps_field = "/home/player/Downloads/maps".to_owned();
+            let tile = |a: [u8; 3], b: [u8; 3], cell: usize, name: &str| {
+                let side = 96usize;
+                let mut rgba = Vec::new();
+                for y in 0..side {
+                    for x in 0..side {
+                        let c = if (x / cell + y / cell).is_multiple_of(2) { a } else { b };
+                        rgba.extend_from_slice(&[c[0], c[1], c[2], 255]);
+                    }
+                }
+                let image = egui::ColorImage::from_rgba_unmultiplied([side, side], &rgba);
+                ctx.load_texture(name, image, egui::TextureOptions::NEAREST)
+            };
+            self.preview = Some((
+                tile([150, 120, 90], [120, 96, 70], 24, "before"),
+                tile([160, 126, 92], [112, 90, 66], 12, "after"),
+            ));
+        }
+        if has("busy") {
+            let (send, reports) = channel();
+            // the sender is kept for the program's life, so the made-up run never ends
+            std::mem::forget(send);
+            self.job = Some(Job { reports, cancel: Arc::new(AtomicBool::new(false)) });
+        }
+        if has("done") {
+            self.step = Some((120, 120, String::new()));
+            self.outcome = Some(Ok(()));
+        }
+        if has("failed") {
+            self.outcome = Some(Err("levels/ballance-remaster: permission denied".to_owned()));
+        }
     }
 }
 

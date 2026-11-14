@@ -71,6 +71,15 @@ text!(
     "Macht Remaster-Level aus deiner Kopie von Ballance: rundere Formen und größere Texturen.",
     "用你自己的 Ballance 拷贝制作重制关卡：更圆的形状和更大的纹理。"
 );
+text!(
+    REMASTER_TITLE,
+    "Remaster the original levels",
+    "Ремастер оригинальных уровней",
+    "Remaster der Original-Level",
+    "重制原版关卡"
+);
+text!(MAPS_TITLE, "Import community maps", "Импорт любительских карт", "Community-Karten importieren", "导入自制地图");
+text!(ADVANCED, "Advanced", "Дополнительно", "Erweitert", "高级");
 text!(LANGUAGE, "Language", "Язык", "Sprache", "语言");
 text!(COPY, "Your copy of the game", "Ваша копия игры", "Deine Kopie des Spiels", "你的游戏拷贝");
 text!(

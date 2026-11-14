@@ -24,7 +24,12 @@ Started without a command it opens its window (Linux X11 or Wayland, Windows, ma
 scale chosen last, in `toolbox.txt` in the game's data folder): your copy of the game, the
 scale, the Real-ESRGAN model, the relief, a Make button, the progress per level and part with Cancel, the result and
 a texture before and after. Its texts are in English, Russian, German and Simplified Chinese, from the system's
-language or chosen in the window; Chinese uses a font the system has (Noto CJK, Microsoft YaHei, PingFang...).
+language or chosen in the window. The window looks like the game's own menu (a dusk sky, framed dark panels, pill
+buttons with a ball, the game's Tektur lettering), drawn by the toolbox itself: it needs no copy and ships no
+pictures. Its two sections are "Remaster the original levels" and "Import community maps", each with one main
+button; the Real-ESRGAN model and the relief are folded under Advanced. Tektur and Noto Sans (the game's fonts, SIL
+OFL) are built in; Chinese uses the game's Noto Sans SC when the game's `assets/` lie beside the program, else a font
+the system has (Noto CJK, Microsoft YaHei, PingFang...).
 
 `remaster` converts the original levels the copy has into the game's `levels/ballance-remaster/` (the open format), gives
 each level rounder shapes (written into the level beside the original meshes, which the physics keeps using, so runs

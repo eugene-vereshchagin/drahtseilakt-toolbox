@@ -17,6 +17,7 @@ mod normals;
 mod remaster;
 mod smooth;
 mod texts;
+mod theme;
 mod unsorted;
 
 use std::path::PathBuf;
