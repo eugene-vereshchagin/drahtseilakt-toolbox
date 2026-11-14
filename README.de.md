@@ -23,8 +23,8 @@ drahtseilakt-toolbox import-maps --refresh DIR --catalogue FILE [--source DIR] [
 Ohne Befehl gestartet öffnet die Toolbox ihr Fenster (Linux X11 oder Wayland, Windows, macOS; Modell und Faktor
 der letzten Wahl merkt es sich in `toolbox.txt` im Datenordner des Spiels): deine Kopie des
 Spiels, die Vergrößerung, das Real-ESRGAN-Modell, das Relief, ein Knopf Erstellen, der Fortschritt je Level und Teil
-mit Abbrechen, das Ergebnis und eine Textur vorher und nachher. Die Texte gibt es auf Englisch, Russisch, Deutsch
-und vereinfachtem Chinesisch, nach der Systemsprache oder im Fenster gewählt. Das Fenster sieht aus wie das eigene
+mit Abbrechen, das Ergebnis und eine Textur vorher und nachher. Die Texte gibt es auf Englisch, Russisch, Deutsch,
+vereinfachtem Chinesisch, Französisch, Spanisch und Italienisch, nach der Systemsprache oder im Fenster gewählt. Das Fenster sieht aus wie das eigene
 Menü des Spiels (Abendhimmel, gerahmte dunkle Tafeln, Pillenknöpfe mit Kugel, die Tektur-Schrift des Spiels) und
 wird von der Toolbox selbst gezeichnet: Es braucht keine Kopie und bringt keine Bilder mit. Seine zwei Abschnitte
 sind „Remaster der Original-Level“ und „Community-Karten importieren“, jeder mit einem Hauptknopf; das

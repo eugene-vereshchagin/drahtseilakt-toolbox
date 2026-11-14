@@ -23,7 +23,7 @@ drahtseilakt-toolbox import-maps --refresh DIR --catalogue FILE [--source DIR] [
 Started without a command it opens its window (Linux X11 or Wayland, Windows, macOS; it remembers the model and
 scale chosen last, in `toolbox.txt` in the game's data folder): your copy of the game, the
 scale, the Real-ESRGAN model, the relief, a Make button, the progress per level and part with Cancel, the result and
-a texture before and after. Its texts are in English, Russian, German and Simplified Chinese, from the system's
+a texture before and after. Its texts are in English, Russian, German, Simplified Chinese, French, Spanish and Italian, from the system's
 language or chosen in the window. The window looks like the game's own menu (a dusk sky, framed dark panels, pill
 buttons with a ball, the game's Tektur lettering), drawn by the toolbox itself: it needs no copy and ships no
 pictures. Its two sections are "Remaster the original levels" and "Import community maps", each with one main
