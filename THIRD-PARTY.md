@@ -34,6 +34,8 @@ has no licence files of its own. Their texts follow at the end of this file.
 | [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) (the models) | v0.2.5.0 | Xintao Wang | BSD-3-Clause |
 | [Real-ESRGAN-ncnn-vulkan](https://github.com/xinntao/Real-ESRGAN-ncnn-vulkan) (the program) | 20220424 | Xintao Wang | MIT |
 | [ncnn](https://github.com/Tencent/ncnn) (the inference library built into the program) | as in that release | Tencent | BSD-3-Clause |
+| [realsr-ncnn-vulkan](https://github.com/nihui/realsr-ncnn-vulkan) (the program's base) | as in that release | nihui | MIT |
+| vcomp140.dll (Windows only: Microsoft's OpenMP runtime, as the release archive carries it) | 14.x | Microsoft | Visual C++ redistributable terms |
 
 The community models tried locally (`third-party.txt`, Upscayl's collection) are for local use only and never go into
 a download.

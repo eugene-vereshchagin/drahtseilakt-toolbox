@@ -3,7 +3,7 @@
 #
 # Real-ESRGAN ncnn Vulkan, Linux x86-64 build (program and models). Licences: Real-ESRGAN BSD-3-Clause (models),
 # Real-ESRGAN-ncnn-vulkan MIT, ncnn BSD-3-Clause; the archive has no licence files, so a download that carries it
-# must add their texts. Windows and macOS builds of the same release are to be pinned the same way.
+# must add their texts. The macOS build of the same release is to be pinned the same way.
 # The authors publish no hash: this one was taken at the first download (2026-11-02) and the size checked against
 # the release's (46931474 bytes).
 name      realesrgan-ncnn-vulkan
@@ -11,6 +11,16 @@ version   v0.2.5.0 (20220424)
 url       https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/realesrgan-ncnn-vulkan-20220424-ubuntu.zip
 sha256    e5aa6eb131234b87c0c51f82b89390f5e3e642b7b70f2b9bbe95b6a285a40c96
 unpack    third_party/realesrgan/ (the demo pictures and video left out), program made executable
+
+# The Windows x86-64 build of the same release, for the Windows toolbox (portable builds). It carries the program,
+# the same models and vcomp140.dll (Microsoft's OpenMP runtime, shipped by the authors in the release; redistributable
+# under the Visual C++ redistributable terms). No published hash: taken at the first download (2026-11-16), size checked
+# against the release's (45474481 bytes, GitHub API).
+name      realesrgan-ncnn-vulkan-windows
+version   v0.2.5.0 (20220424)
+url       https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/realesrgan-ncnn-vulkan-20220424-windows.zip
+sha256    abc02804e17982a3be33675e4d471e91ea374e65b70167abc09e31acb412802d
+unpack    realesrgan/ beside the toolbox's .exe: realesrgan-ncnn-vulkan.exe, vcomp140.dll, models/ (demo files left out)
 
 # Community models tried on the owner's machine (2026-11-02), downloaded into third_party/models-test/ from the
 # Upscayl collection (github.com/upscayl/custom-models, models/), sizes checked against the repository's. Their
