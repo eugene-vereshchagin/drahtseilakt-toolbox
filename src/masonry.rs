@@ -118,7 +118,11 @@ pub fn map(original: &RgbaImage, grown: (u32, u32)) -> RgbaImage {
     let scale = (gw / w.max(1)).max(1) as usize;
     // a narrow bevel: flat tops, edges leaning over about a quarter of an original texel
     let big = blur(big, bw, bh, (scale / 4).max(1), wrap);
-    let get = |x: i64, y: i64| big.get(address(y, bh, wrap) * bw + address(x, bw, wrap)).copied().unwrap_or(0.55);
+    let get = |x: i64, y: i64| {
+        big.get(address(y, bh, wrap) * bw + address(x, bw, wrap))
+            .copied()
+            .unwrap_or(0.55)
+    };
     // the slope over one texel of the original: a brick's edge leans as far at any size
     let d = scale.div_ceil(2).max(1) as i64;
     let per = scale as f32 / (2 * d) as f32;
@@ -166,7 +170,13 @@ fn blur(mut v: Vec<f32>, w: usize, h: usize, r: usize, wrap: bool) -> Vec<f32> {
         }
     }
     for x in 0..w {
-        let at = |y: i64| f64::from(rows.get(address(y, h, wrap) * w + x).copied().unwrap_or(0.0));
+        let at = |y: i64| {
+            f64::from(
+                rows.get(address(y, h, wrap) * w + x)
+                    .copied()
+                    .unwrap_or(0.0),
+            )
+        };
         let mut s: f64 = (-r..=r).map(at).sum();
         for y in 0..h as i64 {
             if let Some(o) = v.get_mut(y as usize * w + x) {
@@ -206,7 +216,10 @@ mod tests {
         let m = map(&b, (128, 128));
         let a = |x: u32, y: u32| m.get_pixel(x, y).0[3];
         // a brick's middle stands above the concrete, which stands above the mortar
-        assert!(a(2 * 4 + 6, 2 * 27) > a(2 * 4 + 6, 2 * 10), "brick above concrete");
+        assert!(
+            a(2 * 4 + 6, 2 * 27) > a(2 * 4 + 6, 2 * 10),
+            "brick above concrete"
+        );
         assert!(a(2 * 4 + 6, 2 * 10) > a(0, 2 * 31), "concrete above mortar");
         // all wood (orange everywhere, yellower) is no masonry
         let wood = RgbaImage::from_pixel(64, 64, image::Rgba([170, 120, 60, 255]));

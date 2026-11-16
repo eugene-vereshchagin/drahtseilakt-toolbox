@@ -22,6 +22,8 @@ const COLUMN_MARGIN: f32 = 28.0;
 
 /// Opens the window; returns when it is closed.
 pub fn run(data_dir: Option<PathBuf>) -> Result<(), String> {
+    // the fonts first: without them the window could show no text, so a missing one is said here, plainly
+    let fonts = theme::load_fonts()?;
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([760.0, 720.0])
@@ -32,7 +34,7 @@ pub fn run(data_dir: Option<PathBuf>) -> Result<(), String> {
         "drahtseilakt-toolbox",
         options,
         Box::new(move |cc| {
-            theme::apply(&cc.egui_ctx);
+            theme::apply(&cc.egui_ctx, fonts);
             Ok(Box::new(App::new(data_dir)))
         }),
     )
@@ -58,8 +60,13 @@ fn remembered() -> (Option<String>, Option<u32>) {
             .find(|(k, _)| *k == key)
             .map(|(_, v)| v.trim().to_owned())
     };
-    let scale = value("scale").and_then(|v| v.parse::<u32>().ok()).filter(|n| (1..=8).contains(n));
-    (value("model").filter(|m| !m.is_empty() && m.len() <= 64), scale)
+    let scale = value("scale")
+        .and_then(|v| v.parse::<u32>().ok())
+        .filter(|n| (1..=8).contains(n));
+    (
+        value("model").filter(|m| !m.is_empty() && m.len() <= 64),
+        scale,
+    )
 }
 
 /// The folder the file chooser was last left in (`dir PATH` line), when it is still a folder.
@@ -121,12 +128,21 @@ fn start_dir(field: &str, last: Option<&Path>) -> Option<PathBuf> {
 
 /// The folder to remember after a pick: the folder itself, or the one holding the picked file.
 fn dir_of_pick(picked: &Path, folder: bool) -> Option<PathBuf> {
-    if folder { Some(picked.to_path_buf()) } else { picked.parent().map(Path::to_path_buf) }
+    if folder {
+        Some(picked.to_path_buf())
+    } else {
+        picked.parent().map(Path::to_path_buf)
+    }
 }
 
 /// Opens the system's chooser on its own thread (the window keeps drawing); the answer comes through the channel,
 /// none when it was cancelled. A backend that is not there (no portal) ends the thread without an answer.
-fn open_chooser(kind: Pick, title: &str, start: Option<PathBuf>, ctx: &egui::Context) -> Receiver<Option<PathBuf>> {
+fn open_chooser(
+    kind: Pick,
+    title: &str,
+    start: Option<PathBuf>,
+    ctx: &egui::Context,
+) -> Receiver<Option<PathBuf>> {
     let (send, answer) = channel();
     let (title, ctx) = (title.to_owned(), ctx.clone());
     std::thread::spawn(move || {
@@ -190,7 +206,9 @@ impl App {
         let (kept_model, kept_scale) = remembered();
         let model = match kept_model.filter(|m| models.contains(m)) {
             Some(m) => m,
-            None if models.iter().any(|m| m == "realesrgan-x4plus") => "realesrgan-x4plus".to_owned(),
+            None if models.iter().any(|m| m == "realesrgan-x4plus") => {
+                "realesrgan-x4plus".to_owned()
+            }
             None => models.first().cloned().unwrap_or_default(),
         };
         App {
@@ -245,7 +263,9 @@ impl App {
             };
             let result = std::fs::create_dir_all(&out)
                 .map_err(|e| format!("{}: {e}", out.display()))
-                .and_then(|()| remaster::run_in(&data, &out, scale, &model, relief, &[], &mut watch))
+                .and_then(|()| {
+                    remaster::run_in(&data, &out, scale, &model, relief, &[], &mut watch)
+                })
                 .and_then(|mut lines| {
                     let sounds = gamedata::profile::data_dir().join("sounds");
                     lines.push(remaster::original_sounds(&data, &sounds)?);
@@ -281,7 +301,10 @@ impl App {
                 let _ = tell.send(Ok(Progress::Line(l)));
                 repaint.request_repaint();
             };
-            let sorting = crate::import::Sorting { catalogue: None, unsorted: crate::import::default_unsorted(&to) };
+            let sorting = crate::import::Sorting {
+                catalogue: None,
+                unsorted: crate::import::default_unsorted(&to),
+            };
             let result = crate::import::import(&from, &to, &sorting, &mut line, &stop);
             if let Ok(s) = &result {
                 let _ = send.send(Ok(Progress::Line(crate::import::summary_line(s, &to))));
@@ -293,7 +316,11 @@ impl App {
                     });
                 }
             }
-            let _ = send.send(result.map(|_| Progress::Step { done: 0, total: 0, what: String::new() }));
+            let _ = send.send(result.map(|_| Progress::Step {
+                done: 0,
+                total: 0,
+                what: String::new(),
+            }));
             ctx2.request_repaint();
         });
         self.job = Some(Job { reports, cancel });
@@ -321,7 +348,9 @@ impl App {
 
     /// Takes the chooser's answer: the path fills its field and is checked as a typed one is.
     fn poll_chooser(&mut self) {
-        let Some((kind, answer)) = &self.chooser else { return };
+        let Some((kind, answer)) = &self.chooser else {
+            return;
+        };
         let kind = *kind;
         let picked = match answer.try_recv() {
             Ok(p) => p,
@@ -417,7 +446,12 @@ fn thumb(ctx: &egui::Context, path: &Path, name: &str) -> Option<egui::TextureHa
 
 /// A path field with its buttons: on one line when the panel is wide, the buttons under the field when it is
 /// narrow. Returns whether Enter was pressed in the field, and the button clicked.
-fn path_row(ui: &mut egui::Ui, field: &mut String, enabled: bool, buttons: &[(&str, bool)]) -> (bool, Option<usize>) {
+fn path_row(
+    ui: &mut egui::Ui,
+    field: &mut String,
+    enabled: bool,
+    buttons: &[(&str, bool)],
+) -> (bool, Option<usize>) {
     let mut clicked = None;
     let mut entered = false;
     let mut edit = |ui: &mut egui::Ui, width: f32| {
@@ -514,7 +548,10 @@ impl App {
             });
             ui.horizontal_wrapped(|ui| {
                 ui.label(texts::RELIEF.get(l));
-                ui.add_enabled(!busy, egui::Slider::new(&mut self.relief, 0.0..=8.0).step_by(0.5));
+                ui.add_enabled(
+                    !busy,
+                    egui::Slider::new(&mut self.relief, 0.0..=8.0).step_by(0.5),
+                );
             });
             if self.relief > 0.0 {
                 ui.colored_label(theme::GOLD, texts::RELIEF_WARN.get(l));
@@ -523,7 +560,8 @@ impl App {
         ui.add_space(4.0);
         if busy && !self.imported {
             self.cancel_button(ui);
-        } else if theme::main_button(ui, texts::MAKE.get(l), !busy && self.data.is_some()).clicked() {
+        } else if theme::main_button(ui, texts::MAKE.get(l), !busy && self.data.is_some()).clicked()
+        {
             self.imported = false;
             self.start(ctx);
         }
@@ -568,7 +606,11 @@ impl App {
         let busy = self.job.is_some();
         theme::heading(ui, texts::RESULT.get(l), 17.0, theme::GOLD, false);
         if let Some((done, total, what)) = &self.step {
-            let part = if *total > 0 { *done as f32 / *total as f32 } else { 0.0 };
+            let part = if *total > 0 {
+                *done as f32 / *total as f32
+            } else {
+                0.0
+            };
             theme::progress(ui, part, &format!("{done} / {total}"));
             if busy {
                 ui.horizontal(|ui| {
@@ -581,8 +623,16 @@ impl App {
         }
         match &self.outcome {
             Some(Ok(())) => {
-                ui.label(egui::RichText::new(texts::DONE.get(l)).strong().color(theme::GOLD));
-                ui.label(if self.imported { texts::PLAY_MAPS.get(l) } else { texts::PLAY.get(l) });
+                ui.label(
+                    egui::RichText::new(texts::DONE.get(l))
+                        .strong()
+                        .color(theme::GOLD),
+                );
+                ui.label(if self.imported {
+                    texts::PLAY_MAPS.get(l)
+                } else {
+                    texts::PLAY.get(l)
+                });
             }
             Some(Err(e)) => {
                 ui.colored_label(theme::ERROR, format!("{} {e}", texts::FAILED.get(l)));
@@ -622,49 +672,65 @@ impl eframe::App for App {
         self.demo(ctx);
         self.poll(ctx);
         self.poll_chooser();
-        egui::CentralPanel::default().frame(egui::Frame::NONE).show(root, |ui| {
-            let column = (ui.available_width() - 2.0 * COLUMN_MARGIN).clamp(200.0, COLUMN_MAX);
-            theme::backdrop(ui, column + 28.0);
-            egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
-                let side = ((ui.available_width() - column) / 2.0).max(0.0);
-                ui.horizontal(|ui| {
-                    ui.add_space(side);
-                    ui.vertical(|ui| {
-                        ui.set_width(column);
-                        ui.add_space(10.0);
-                        let l = self.lang;
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            egui::ComboBox::from_id_salt("lang")
-                                .selected_text(LANGS.iter().find(|x| x.0 == l).map_or("", |x| x.1))
-                                .show_ui(ui, |ui| {
-                                    for (lang, name) in LANGS {
-                                        ui.selectable_value(&mut self.lang, lang, name);
+        egui::CentralPanel::default()
+            .frame(egui::Frame::NONE)
+            .show(root, |ui| {
+                let column = (ui.available_width() - 2.0 * COLUMN_MARGIN).clamp(200.0, COLUMN_MAX);
+                theme::backdrop(ui, column + 28.0);
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        let side = ((ui.available_width() - column) / 2.0).max(0.0);
+                        ui.horizontal(|ui| {
+                            ui.add_space(side);
+                            ui.vertical(|ui| {
+                                ui.set_width(column);
+                                ui.add_space(10.0);
+                                let l = self.lang;
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(egui::Align::Center),
+                                    |ui| {
+                                        egui::ComboBox::from_id_salt("lang")
+                                            .selected_text(
+                                                LANGS.iter().find(|x| x.0 == l).map_or("", |x| x.1),
+                                            )
+                                            .show_ui(ui, |ui| {
+                                                for (lang, name) in LANGS {
+                                                    ui.selectable_value(&mut self.lang, lang, name);
+                                                }
+                                            });
+                                        ui.label(texts::LANGUAGE.get(l));
+                                    },
+                                );
+                                theme::heading(
+                                    ui,
+                                    texts::TITLE.get(l),
+                                    24.0,
+                                    egui::Color32::WHITE,
+                                    true,
+                                );
+                                ui.add_space(6.0);
+                                theme::panel(ui, |ui| self.remaster_section(ui, ctx));
+                                ui.add_space(4.0);
+                                theme::panel(ui, |ui| self.maps_section(ui, ctx));
+                                let shown = self.job.is_some()
+                                    || self.step.is_some()
+                                    || self.outcome.is_some()
+                                    || !self.lines.is_empty()
+                                    || self.preview.is_some();
+                                if shown {
+                                    ui.add_space(4.0);
+                                    let result = ui
+                                        .scope(|ui| theme::panel(ui, |ui| self.result_section(ui)));
+                                    if std::mem::take(&mut self.reveal) {
+                                        result.response.scroll_to_me(Some(egui::Align::BOTTOM));
                                     }
-                                });
-                            ui.label(texts::LANGUAGE.get(l));
+                                }
+                                ui.add_space(16.0);
+                            });
                         });
-                        theme::heading(ui, texts::TITLE.get(l), 24.0, egui::Color32::WHITE, true);
-                        ui.add_space(6.0);
-                        theme::panel(ui, |ui| self.remaster_section(ui, ctx));
-                        ui.add_space(4.0);
-                        theme::panel(ui, |ui| self.maps_section(ui, ctx));
-                        let shown = self.job.is_some()
-                            || self.step.is_some()
-                            || self.outcome.is_some()
-                            || !self.lines.is_empty()
-                            || self.preview.is_some();
-                        if shown {
-                            ui.add_space(4.0);
-                            let result = ui.scope(|ui| theme::panel(ui, |ui| self.result_section(ui)));
-                            if std::mem::take(&mut self.reveal) {
-                                result.response.scroll_to_me(Some(egui::Align::BOTTOM));
-                            }
-                        }
-                        ui.add_space(16.0);
                     });
-                });
             });
-        });
     }
 }
 
@@ -676,7 +742,9 @@ impl App {
         static ONCE: std::sync::Once = std::sync::Once::new();
         let mut first = false;
         ONCE.call_once(|| first = true);
-        let Some(words) = std::env::var("TOOLBOX_DEMO").ok().filter(|_| first) else { return };
+        let Some(words) = std::env::var("TOOLBOX_DEMO").ok().filter(|_| first) else {
+            return;
+        };
         let has = |w: &str| words.split(',').any(|x| x == w);
         if has("nocopy") {
             self.data = None;
@@ -695,14 +763,20 @@ impl App {
         if has("busy") || has("done") || has("failed") {
             self.reveal = true;
             self.step = Some((37, 120, "Level_03: Floor_Top_Profil.bmp".to_owned()));
-            self.lines = (1..=9).map(|n| format!("Level_{n:02}: 214 meshes rounded, 38 textures 4× larger")).collect();
+            self.lines = (1..=9)
+                .map(|n| format!("Level_{n:02}: 214 meshes rounded, 38 textures 4× larger"))
+                .collect();
             self.maps_field = "/home/player/Downloads/maps".to_owned();
             let tile = |a: [u8; 3], b: [u8; 3], cell: usize, name: &str| {
                 let side = 96usize;
                 let mut rgba = Vec::new();
                 for y in 0..side {
                     for x in 0..side {
-                        let c = if (x / cell + y / cell).is_multiple_of(2) { a } else { b };
+                        let c = if (x / cell + y / cell).is_multiple_of(2) {
+                            a
+                        } else {
+                            b
+                        };
                         rgba.extend_from_slice(&[c[0], c[1], c[2], 255]);
                     }
                 }
@@ -718,7 +792,10 @@ impl App {
             let (send, reports) = channel();
             // the sender is kept for the program's life, so the made-up run never ends
             std::mem::forget(send);
-            self.job = Some(Job { reports, cancel: Arc::new(AtomicBool::new(false)) });
+            self.job = Some(Job {
+                reports,
+                cancel: Arc::new(AtomicBool::new(false)),
+            });
         }
         if has("done") {
             self.step = Some((120, 120, String::new()));
@@ -740,16 +817,28 @@ mod tests {
         let t = tmp.display().to_string();
         assert_eq!(start_dir(&t, None), Some(tmp.clone()));
         // a file path that is not there: the folder holding it
-        assert_eq!(start_dir(&format!("{t}/no-such-image.cue"), None), Some(tmp.clone()));
+        assert_eq!(
+            start_dir(&format!("{t}/no-such-image.cue"), None),
+            Some(tmp.clone())
+        );
         // nothing typed: the folder chosen last, if it is still a folder
         assert_eq!(start_dir("  ", Some(&tmp)), Some(tmp.clone()));
-        assert_eq!(start_dir("", Some(Path::new("/no/such/dir/anywhere"))), None);
+        assert_eq!(
+            start_dir("", Some(Path::new("/no/such/dir/anywhere"))),
+            None
+        );
         assert_eq!(start_dir("", None), None);
     }
 
     #[test]
     fn remembered_folder_is_the_pick_or_its_parent() {
-        assert_eq!(dir_of_pick(Path::new("/a/b"), true), Some(PathBuf::from("/a/b")));
-        assert_eq!(dir_of_pick(Path::new("/a/b/game.cue"), false), Some(PathBuf::from("/a/b")));
+        assert_eq!(
+            dir_of_pick(Path::new("/a/b"), true),
+            Some(PathBuf::from("/a/b"))
+        );
+        assert_eq!(
+            dir_of_pick(Path::new("/a/b/game.cue"), false),
+            Some(PathBuf::from("/a/b"))
+        );
     }
 }

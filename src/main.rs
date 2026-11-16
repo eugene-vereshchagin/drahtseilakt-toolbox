@@ -140,8 +140,14 @@ fn options(args: impl Iterator<Item = String>) -> Result<Options, String> {
             "--refresh" => o.refresh = Some(value()?.into()),
             "--model" => o.model = value()?,
             "--relief" => {
-                let r: f32 = value()?.parse().map_err(|_| "--relief needs a number (0 to 20)".to_owned())?;
-                o.relief = if r.is_finite() { r.clamp(0.0, 20.0) } else { 0.0 };
+                let r: f32 = value()?
+                    .parse()
+                    .map_err(|_| "--relief needs a number (0 to 20)".to_owned())?;
+                o.relief = if r.is_finite() {
+                    r.clamp(0.0, 20.0)
+                } else {
+                    0.0
+                };
             }
             "-h" | "--help" => o.command = Some("help".into()),
             c if !c.starts_with('-') && o.command.is_none() => o.command = Some(c.to_owned()),
@@ -166,7 +172,13 @@ fn main() -> ExitCode {
             Some("sounds") => {
                 // only the "original" sound theme, from the copy's sounds and music
                 let data = gamedata::assets::Data::locate(o.data)?;
-                println!("{}", remaster::original_sounds(&data, &gamedata::profile::data_dir().join("sounds"))?);
+                println!(
+                    "{}",
+                    remaster::original_sounds(
+                        &data,
+                        &gamedata::profile::data_dir().join("sounds")
+                    )?
+                );
                 Ok(())
             }
             Some("remaster-open") => {
@@ -193,13 +205,26 @@ fn main() -> ExitCode {
             Some("import-maps") => {
                 let catalogue = o.catalogue.as_deref().map(catalogue::read).transpose()?;
                 if let Some(c) = &catalogue {
-                    println!("catalogue: {} maps ({} rows skipped as malformed)", c.entries.len(), c.skipped);
+                    println!(
+                        "catalogue: {} maps ({} rows skipped as malformed)",
+                        c.entries.len(),
+                        c.skipped
+                    );
                 }
                 let never = std::sync::atomic::AtomicBool::new(false);
                 if let Some(dir) = o.refresh {
-                    let c = catalogue.as_ref().ok_or("import-maps --refresh needs --catalogue FILE")?;
+                    let c = catalogue
+                        .as_ref()
+                        .ok_or("import-maps --refresh needs --catalogue FILE")?;
                     let unsorted = o.unsorted.unwrap_or_else(|| import::default_unsorted(&dir));
-                    let r = import::refresh(&dir, c, o.source.as_deref(), &unsorted, &mut |l| println!("{l}"), &never)?;
+                    let r = import::refresh(
+                        &dir,
+                        c,
+                        o.source.as_deref(),
+                        &unsorted,
+                        &mut |l| println!("{l}"),
+                        &never,
+                    )?;
                     for l in r.left.iter().chain(&r.failed) {
                         println!("{}", import::printable(l));
                     }
@@ -207,7 +232,9 @@ fn main() -> ExitCode {
                     return Ok(());
                 }
                 let from = o.folder.ok_or("import-maps needs the folder of maps")?;
-                let to = o.to.unwrap_or_else(|| gamedata::profile::dir(gamedata::profile::Kind::Downloaded));
+                let to = o
+                    .to
+                    .unwrap_or_else(|| gamedata::profile::dir(gamedata::profile::Kind::Downloaded));
                 let sorting = import::Sorting {
                     catalogue: catalogue.as_ref(),
                     unsorted: o.unsorted.unwrap_or_else(|| import::default_unsorted(&to)),

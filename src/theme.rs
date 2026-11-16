@@ -2,20 +2,23 @@
 // peach), a dark band down the middle, framed dark panels, pill buttons with a metal rim and a ball (gold on the one
 // under the cursor), labels in the game's interface face (Tektur, bold, lower case as small capitals, spaced).
 // Nothing is read from the player's copy and no picture is shipped: the shapes are egui's, the colours are measured
-// on the game's own menu art. The fonts are the game's (its assets/fonts, SIL OFL): Tektur and Noto Sans are built
-// in, so the first window already looks right; Chinese comes from the game's Noto Sans SC beside the program, else
-// from a font the system has (never downloaded).
+// on the game's own menu art. The fonts are the game's (its assets/fonts, SIL OFL: Tektur, Noto Sans, Noto Sans SC),
+// read at run time from where the game keeps them, never compiled in (nor egui's own fonts): the program stays
+// GPL-only and the fonts ship as separate files beside their licences. Chinese falls back to a font the system has.
+// Nothing is ever downloaded.
 
 use eframe::egui::{
-    self, Align2, Color32, CornerRadius, FontFamily, FontId, Pos2, Rect, Response, Sense, Stroke, StrokeKind, Ui,
-    Vec2,
+    self, Align2, Color32, CornerRadius, FontFamily, FontId, Pos2, Rect, Response, Sense, Stroke,
+    StrokeKind, Ui, Vec2,
 };
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-/// The game's interface face and its body face (the game's assets/fonts; the licences lie beside them there).
-const TEKTUR: &[u8] = include_bytes!("../../drahtseilakt/assets/fonts/Tektur-Variable.ttf");
-const NOTO: &[u8] = include_bytes!("../../drahtseilakt/assets/fonts/NotoSans-Regular.ttf");
+/// The game's font files the window reads (its assets/fonts; the licences lie beside them there): the interface face,
+/// the body face (Latin, Cyrillic, Greek, the dashes of the texts) and Chinese.
+const CAPS_FILE: &str = "Tektur-Variable.ttf";
+const BODY_FILE: &str = "NotoSans-Regular.ttf";
+const CHINESE_FILE: &str = "NotoSansSC-Regular.otf";
 /// Tektur's weight, as the game sets it; the small capitals' size against the capitals (the game's 0.8); the space
 /// between letters as a fraction of the size.
 const WEIGHT: f32 = 700.0;
@@ -79,49 +82,124 @@ fn read_font(path: &Path) -> Option<Vec<u8>> {
     (u64::try_from(bytes.len()).ok()? <= FONT_MAX).then_some(bytes)
 }
 
-/// The font for Chinese: the game's own beside the program, else the first the system has.
-fn chinese_font() -> Option<Vec<u8>> {
-    gamedata::resources::assets_root()
-        .and_then(|a| read_font(&a.join("fonts").join("NotoSansSC-Regular.otf")))
-        .or_else(|| CJK_FONTS.iter().find_map(|p| read_font(Path::new(p))))
+/// A font file's first bytes: TrueType, OpenType (CFF), a collection.
+fn is_font(bytes: &[u8]) -> bool {
+    [&[0u8, 1, 0, 0][..], b"OTTO", b"true", b"ttcf"]
+        .iter()
+        .any(|m| bytes.starts_with(m))
+}
+
+/// Where the game's fonts are looked for, in order: the game's assets folder, found as the game finds it (beside the
+/// program, in the portable folder or the macOS bundle, the game's tree in development), then a `fonts` folder beside
+/// the program (a toolbox download carries one, with the licences).
+fn font_dirs() -> Vec<PathBuf> {
+    let mut dirs: Vec<PathBuf> = gamedata::resources::assets_root()
+        .map(|a| a.join("fonts"))
+        .into_iter()
+        .collect();
+    if let Some(dir) = std::env::current_exe()
+        .ok()
+        .as_deref()
+        .and_then(Path::parent)
+    {
+        dirs.push(dir.join("fonts"));
+    }
+    dirs
+}
+
+/// The window's fonts, read before it opens.
+pub struct Fonts {
+    caps: Vec<u8>,
+    body: Vec<u8>,
+    chinese: Option<Vec<u8>>,
+}
+
+/// Reads the window's fonts from where the game keeps them; Chinese, if the game's is missing, from the system.
+pub fn load_fonts() -> Result<Fonts, String> {
+    let mut fonts = load_fonts_from(&font_dirs())?;
+    if fonts.chinese.is_none() {
+        fonts.chinese = CJK_FONTS
+            .iter()
+            .find_map(|p| read_font(Path::new(p)).filter(|b| is_font(b)));
+    }
+    Ok(fonts)
+}
+
+/// The fonts from the first of `dirs` that has each; an error names the missing file and every folder looked in.
+fn load_fonts_from(dirs: &[PathBuf]) -> Result<Fonts, String> {
+    let find = |name: &str| {
+        dirs.iter()
+            .find_map(|d| read_font(&d.join(name)).filter(|b| is_font(b)))
+    };
+    let need = |name: &str| {
+        find(name).ok_or_else(|| {
+            let looked: Vec<String> = dirs.iter().map(|d| d.display().to_string()).collect();
+            let looked = if looked.is_empty() { "nowhere: no folder found".to_owned() } else { looked.join(", ") };
+            format!(
+                "the font {name} was not found (looked in: {looked}). The toolbox draws its window with the game's \
+                 fonts (the game's assets/fonts folder): keep the toolbox in the game's folder, or its fonts folder \
+                 beside it"
+            )
+        })
+    };
+    Ok(Fonts {
+        caps: need(CAPS_FILE)?,
+        body: need(BODY_FILE)?,
+        chinese: find(CHINESE_FILE),
+    })
 }
 
 /// Sets the window's fonts and look, once.
-pub fn apply(ctx: &egui::Context) {
+pub fn apply(ctx: &egui::Context, loaded: Fonts) {
     use egui::epaint::text::{FontTweak, VariationCoords};
-    let mut fonts = egui::FontDefinitions::default();
-    let tektur = egui::FontData::from_static(TEKTUR).tweak(FontTweak {
+    // no egui fonts are compiled in (its default_fonts feature is off): every family is bound here
+    let mut fonts = egui::FontDefinitions::empty();
+    let tektur = egui::FontData::from_owned(loaded.caps).tweak(FontTweak {
         coords: VariationCoords::new([(b"wght", WEIGHT)]),
         ..Default::default()
     });
     fonts.font_data.insert("tektur".into(), Arc::new(tektur));
-    fonts.font_data.insert("noto".into(), Arc::new(egui::FontData::from_static(NOTO)));
-    let chinese = chinese_font();
-    let has_chinese = chinese.is_some();
-    if let Some(bytes) = chinese {
-        fonts.font_data.insert("chinese".into(), Arc::new(egui::FontData::from_owned(bytes)));
+    fonts.font_data.insert(
+        "noto".into(),
+        Arc::new(egui::FontData::from_owned(loaded.body)),
+    );
+    let has_chinese = loaded.chinese.is_some();
+    if let Some(bytes) = loaded.chinese {
+        fonts.font_data.insert(
+            "chinese".into(),
+            Arc::new(egui::FontData::from_owned(bytes)),
+        );
     }
-    // each family: its face, then Chinese, then egui's own fonts (symbols)
-    let rest = fonts.families.get(&FontFamily::Proportional).cloned().unwrap_or_default();
-    let chain = |first: &[&str]| -> Vec<String> {
-        first
+    // each family: its faces in order, a face missing a glyph handing on to the next (Noto Sans has no arrows; Noto
+    // Sans SC and Tektur have the texts' one); Chinese is left out when there is none
+    let chain = |order: [&str; 3]| -> Vec<String> {
+        order
             .iter()
-            .map(|s| (*s).to_owned())
-            .chain(has_chinese.then(|| "chinese".to_owned()))
-            .chain(rest.iter().cloned())
+            .filter(|f| has_chinese || **f != "chinese")
+            .map(|f| (*f).to_owned())
             .collect()
     };
-    fonts.families.insert(FontFamily::Name(CAPS_FAMILY.into()), chain(&["tektur", "noto"]));
-    fonts.families.insert(FontFamily::Proportional, chain(&["noto"]));
-    if has_chinese {
-        fonts.families.entry(FontFamily::Monospace).or_default().push("chinese".into());
-    }
+    fonts.families.insert(
+        FontFamily::Name(CAPS_FAMILY.into()),
+        chain(["tektur", "noto", "chinese"]),
+    );
+    fonts.families.insert(
+        FontFamily::Proportional,
+        chain(["noto", "chinese", "tektur"]),
+    );
+    // the window shows no monospace text; the family is bound so that nothing egui draws can miss a font
+    fonts
+        .families
+        .insert(FontFamily::Monospace, chain(["noto", "chinese", "tektur"]));
     ctx.set_fonts(fonts);
 
     let mut style = (*ctx.global_style()).clone();
     use egui::TextStyle as S;
     style.text_styles = [
-        (S::Heading, FontId::new(20.0, FontFamily::Name(CAPS_FAMILY.into()))),
+        (
+            S::Heading,
+            FontId::new(20.0, FontFamily::Name(CAPS_FAMILY.into())),
+        ),
         (S::Body, FontId::new(14.0, FontFamily::Proportional)),
         (S::Button, FontId::new(14.0, FontFamily::Proportional)),
         (S::Small, FontId::new(12.0, FontFamily::Proportional)),
@@ -178,7 +256,10 @@ pub fn caps(text: &str, size: f32, color: Color32, wrap: f32) -> egui::text::Lay
     let mut job = egui::text::LayoutJob::default();
     job.wrap.max_width = wrap;
     let format = |small: bool| egui::TextFormat {
-        font_id: FontId::new(if small { size * SMALL_CAPS } else { size }, FontFamily::Name(CAPS_FAMILY.into())),
+        font_id: FontId::new(
+            if small { size * SMALL_CAPS } else { size },
+            FontFamily::Name(CAPS_FAMILY.into()),
+        ),
         extra_letter_spacing: size * TRACKING,
         color,
         valign: egui::Align::BOTTOM,
@@ -194,7 +275,11 @@ pub fn caps(text: &str, size: f32, color: Color32, wrap: f32) -> egui::text::Lay
             _ => (c, false),
         };
         // spaces and marks stay in the run they are in
-        let small = if c.is_alphanumeric() { small } else { run_small };
+        let small = if c.is_alphanumeric() {
+            small
+        } else {
+            run_small
+        };
         if small != run_small && !run.is_empty() {
             job.append(&run, 0.0, format(run_small));
             run.clear();
@@ -219,11 +304,19 @@ pub fn heading(ui: &mut Ui, text: &str, size: f32, color: Color32, centred: bool
     }
     let galley = ui.painter().layout_job(job);
     let shadow = ui.painter().layout_job(shadow);
-    let size = egui::vec2(if centred { wrap } else { galley.size().x }, galley.size().y);
+    let size = egui::vec2(
+        if centred { wrap } else { galley.size().x },
+        galley.size().y,
+    );
     let (rect, response) = ui.allocate_exact_size(size, Sense::hover());
     if ui.is_rect_visible(rect) {
-        let at = if centred { rect.center_top() } else { rect.left_top() };
-        ui.painter().galley(at + egui::vec2(1.0, 1.5), shadow, Color32::BLACK);
+        let at = if centred {
+            rect.center_top()
+        } else {
+            rect.left_top()
+        };
+        ui.painter()
+            .galley(at + egui::vec2(1.0, 1.5), shadow, Color32::BLACK);
         ui.painter().galley(at, galley, color);
     }
     response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Label, true, text));
@@ -234,17 +327,28 @@ pub fn heading(ui: &mut Ui, text: &str, size: f32, color: Color32, centred: bool
 pub fn backdrop(ui: &Ui, band: f32) {
     let rect = ui.max_rect();
     let mut mesh = egui::Mesh::default();
-    let rows = [(rect.top(), SKY_TOP), (rect.center().y, SKY_MID), (rect.bottom(), SKY_BOTTOM)];
+    let rows = [
+        (rect.top(), SKY_TOP),
+        (rect.center().y, SKY_MID),
+        (rect.bottom(), SKY_BOTTOM),
+    ];
     for (y, color) in rows {
         mesh.colored_vertex(Pos2::new(rect.left(), y), color);
         mesh.colored_vertex(Pos2::new(rect.right(), y), color);
     }
     for i in [0u32, 2] {
         mesh.add_triangle(i, i.saturating_add(1), i.saturating_add(2));
-        mesh.add_triangle(i.saturating_add(1), i.saturating_add(2), i.saturating_add(3));
+        mesh.add_triangle(
+            i.saturating_add(1),
+            i.saturating_add(2),
+            i.saturating_add(3),
+        );
     }
     ui.painter().add(egui::Shape::mesh(mesh));
-    let band = Rect::from_center_size(rect.center(), egui::vec2(band.min(rect.width()), rect.height()));
+    let band = Rect::from_center_size(
+        rect.center(),
+        egui::vec2(band.min(rect.width()), rect.height()),
+    );
     ui.painter().rect_filled(band, 0.0, rgba(24, 22, 34, 150));
 }
 
@@ -261,7 +365,12 @@ pub fn panel<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> R {
     });
     // the frame's dark inner line, as on the game's metal frames
     let inner = shown.response.rect.shrink(3.0);
-    ui.painter().rect_stroke(inner, CornerRadius::same(9), Stroke::new(1.0, rgba(0, 0, 0, 120)), StrokeKind::Inside);
+    ui.painter().rect_stroke(
+        inner,
+        CornerRadius::same(9),
+        Stroke::new(1.0, rgba(0, 0, 0, 120)),
+        StrokeKind::Inside,
+    );
     shown.inner
 }
 
@@ -273,7 +382,11 @@ fn ball(painter: &egui::Painter, centre: Pos2, radius: f32, gold: bool, alpha: f
         ([70, 70, 80], [168, 168, 180], [254, 255, 255])
     };
     let mix = |a: [u8; 3], b: [u8; 3], t: f32| {
-        let m = |x: u8, y: u8| (f32::from(x) + (f32::from(y) - f32::from(x)) * t).round().clamp(0.0, 255.0) as u8;
+        let m = |x: u8, y: u8| {
+            (f32::from(x) + (f32::from(y) - f32::from(x)) * t)
+                .round()
+                .clamp(0.0, 255.0) as u8
+        };
         let [r, g, bl] = [m(a[0], b[0]), m(a[1], b[1]), m(a[2], b[2])];
         rgba(r, g, bl, (255.0 * alpha) as u8)
     };
@@ -283,9 +396,17 @@ fn ball(painter: &egui::Painter, centre: Pos2, radius: f32, gold: bool, alpha: f
     const STEPS: u8 = 7;
     for i in 0..STEPS {
         let t = f32::from(i) / f32::from(STEPS - 1);
-        let colour = if t < 0.6 { mix(dark, base, 0.35 + t / 0.6 * 0.65) } else { mix(base, light, (t - 0.6) / 0.4) };
+        let colour = if t < 0.6 {
+            mix(dark, base, 0.35 + t / 0.6 * 0.65)
+        } else {
+            mix(base, light, (t - 0.6) / 0.4)
+        };
         let shift = radius * 0.36 * t;
-        painter.circle_filled(centre - egui::vec2(shift, shift), radius * (0.96 - 0.80 * t), colour);
+        painter.circle_filled(
+            centre - egui::vec2(shift, shift),
+            radius * (0.96 - 0.80 * t),
+            colour,
+        );
     }
 }
 
@@ -293,9 +414,17 @@ fn ball(painter: &egui::Painter, centre: Pos2, radius: f32, gold: bool, alpha: f
 fn pill_body(painter: &egui::Painter, rect: Rect, chosen: bool, rim: f32, alpha: f32) {
     let fade = |c: Color32| c.gamma_multiply(alpha);
     let round = CornerRadius::same((rect.height() / 2.0).round().clamp(0.0, 255.0) as u8);
-    let fill = if chosen { rgba(124, 66, 60, 235) } else { rgba(62, 61, 72, 225) };
+    let fill = if chosen {
+        rgba(124, 66, 60, 235)
+    } else {
+        rgba(62, 61, 72, 225)
+    };
     painter.rect_filled(rect, round, fade(EDGE));
-    painter.rect_filled(rect.shrink(1.0), round, fade(if chosen { GOLD } else { METAL }));
+    painter.rect_filled(
+        rect.shrink(1.0),
+        round,
+        fade(if chosen { GOLD } else { METAL }),
+    );
     painter.rect_filled(rect.shrink(1.0 + rim), round, fade(EDGE));
     painter.rect_filled(rect.shrink(2.0 + rim), round, fade(fill));
 }
@@ -303,18 +432,43 @@ fn pill_body(painter: &egui::Painter, rect: Rect, chosen: bool, rim: f32, alpha:
 /// A small pill button with a label in the interface's face.
 pub fn button(ui: &mut Ui, text: &str, enabled: bool) -> Response {
     let enabled = enabled && ui.is_enabled();
-    let colour = if enabled { TEXT } else { TEXT_WEAK.gamma_multiply(0.6) };
-    let galley = ui.painter().layout_job(caps(text, 13.0, colour, f32::INFINITY));
+    let colour = if enabled {
+        TEXT
+    } else {
+        TEXT_WEAK.gamma_multiply(0.6)
+    };
+    let galley = ui
+        .painter()
+        .layout_job(caps(text, 13.0, colour, f32::INFINITY));
     let size = egui::vec2(galley.size().x + 30.0, 28.0);
-    let (rect, response) = ui.allocate_exact_size(size, if enabled { Sense::click() } else { Sense::hover() });
+    let (rect, response) = ui.allocate_exact_size(
+        size,
+        if enabled {
+            Sense::click()
+        } else {
+            Sense::hover()
+        },
+    );
     if ui.is_rect_visible(rect) {
         let chosen = enabled && (response.hovered() || response.has_focus());
-        pill_body(ui.painter(), rect, chosen, 1.5, if enabled { 1.0 } else { 0.5 });
-        let at = Align2::CENTER_CENTER.align_size_within_rect(galley.size(), rect).min;
+        pill_body(
+            ui.painter(),
+            rect,
+            chosen,
+            1.5,
+            if enabled { 1.0 } else { 0.5 },
+        );
+        let at = Align2::CENTER_CENTER
+            .align_size_within_rect(galley.size(), rect)
+            .min;
         ui.painter().galley(at, galley, colour);
     }
     response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, enabled, text));
-    if enabled { response.on_hover_cursor(egui::CursorIcon::PointingHand) } else { response }
+    if enabled {
+        response.on_hover_cursor(egui::CursorIcon::PointingHand)
+    } else {
+        response
+    }
 }
 
 /// For looking at the chosen state without a cursor (debug builds only): the main buttons are drawn chosen.
@@ -333,14 +487,28 @@ fn shown_chosen() -> bool {
 pub fn main_button(ui: &mut Ui, text: &str, enabled: bool) -> Response {
     const HEIGHT: f32 = 44.0;
     let enabled = enabled && ui.is_enabled();
-    let colour = if enabled { Color32::WHITE } else { TEXT_WEAK.gamma_multiply(0.6) };
+    let colour = if enabled {
+        Color32::WHITE
+    } else {
+        TEXT_WEAK.gamma_multiply(0.6)
+    };
     let avail = ui.available_width();
-    let galley = ui.painter().layout_job(caps(text, 17.0, colour, f32::INFINITY));
-    let shadow = ui.painter().layout_job(caps(text, 17.0, rgba(0, 0, 0, 170), f32::INFINITY));
-    let width = (galley.size().x + 2.0 * HEIGHT + 24.0).max(300.0).min(avail);
+    let galley = ui
+        .painter()
+        .layout_job(caps(text, 17.0, colour, f32::INFINITY));
+    let shadow = ui
+        .painter()
+        .layout_job(caps(text, 17.0, rgba(0, 0, 0, 170), f32::INFINITY));
+    let width = (galley.size().x + 2.0 * HEIGHT + 24.0)
+        .max(300.0)
+        .min(avail);
     let (row, _) = ui.allocate_exact_size(egui::vec2(avail, HEIGHT), Sense::hover());
     let rect = Rect::from_center_size(row.center(), egui::vec2(width, HEIGHT));
-    let sense = if enabled { Sense::click() } else { Sense::hover() };
+    let sense = if enabled {
+        Sense::click()
+    } else {
+        Sense::hover()
+    };
     let response = ui.interact(rect, ui.next_auto_id().with(text), sense);
     if ui.is_rect_visible(rect) {
         let chosen = enabled && (response.hovered() || response.has_focus() || shown_chosen());
@@ -349,21 +517,34 @@ pub fn main_button(ui: &mut Ui, text: &str, enabled: bool) -> Response {
         let centre = Pos2::new(rect.left() + HEIGHT / 2.0, rect.center().y);
         // the rim's arc round the ball, as on the game's buttons
         let arc = if chosen { GOLD } else { METAL };
-        ui.painter().circle_stroke(centre, HEIGHT / 2.0 - 7.0, Stroke::new(1.5, arc.gamma_multiply(alpha * 0.8)));
+        ui.painter().circle_stroke(
+            centre,
+            HEIGHT / 2.0 - 7.0,
+            Stroke::new(1.5, arc.gamma_multiply(alpha * 0.8)),
+        );
         ball(ui.painter(), centre, HEIGHT / 2.0 - 11.0, chosen, alpha);
-        let at = Align2::CENTER_CENTER.align_size_within_rect(galley.size(), rect).min;
+        let at = Align2::CENTER_CENTER
+            .align_size_within_rect(galley.size(), rect)
+            .min;
         if enabled {
-            ui.painter().galley(at + egui::vec2(1.0, 1.5), shadow, Color32::BLACK);
+            ui.painter()
+                .galley(at + egui::vec2(1.0, 1.5), shadow, Color32::BLACK);
         }
         ui.painter().galley(at, galley, colour);
     }
     response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, enabled, text));
-    if enabled { response.on_hover_cursor(egui::CursorIcon::PointingHand) } else { response }
+    if enabled {
+        response.on_hover_cursor(egui::CursorIcon::PointingHand)
+    } else {
+        response
+    }
 }
 
 /// A line that opens and closes what lies under it: a small triangle and a label in the interface's face.
 pub fn fold(ui: &mut Ui, text: &str, open: &mut bool) -> Response {
-    let galley = ui.painter().layout_job(caps(text, 13.0, TEXT_WEAK, f32::INFINITY));
+    let galley = ui
+        .painter()
+        .layout_job(caps(text, 13.0, TEXT_WEAK, f32::INFINITY));
     let size = egui::vec2(galley.size().x + 22.0, 24.0);
     let (rect, response) = ui.allocate_exact_size(size, Sense::click());
     if response.clicked() {
@@ -374,15 +555,26 @@ pub fn fold(ui: &mut Ui, text: &str, open: &mut bool) -> Response {
         let colour = if lit { GOLD } else { TEXT_WEAK };
         let c = Pos2::new(rect.left() + 7.0, rect.center().y);
         let points = if *open {
-            vec![c + egui::vec2(-5.0, -3.0), c + egui::vec2(5.0, -3.0), c + egui::vec2(0.0, 4.0)]
+            vec![
+                c + egui::vec2(-5.0, -3.0),
+                c + egui::vec2(5.0, -3.0),
+                c + egui::vec2(0.0, 4.0),
+            ]
         } else {
-            vec![c + egui::vec2(-3.0, -5.0), c + egui::vec2(4.0, 0.0), c + egui::vec2(-3.0, 5.0)]
+            vec![
+                c + egui::vec2(-3.0, -5.0),
+                c + egui::vec2(4.0, 0.0),
+                c + egui::vec2(-3.0, 5.0),
+            ]
         };
-        ui.painter().add(egui::Shape::convex_polygon(points, colour, Stroke::NONE));
+        ui.painter()
+            .add(egui::Shape::convex_polygon(points, colour, Stroke::NONE));
         let at = Pos2::new(rect.left() + 20.0, rect.center().y - galley.size().y / 2.0);
         ui.painter().galley(at, galley, colour);
         if lit {
-            let recolour = ui.painter().layout_job(caps(text, 13.0, GOLD, f32::INFINITY));
+            let recolour = ui
+                .painter()
+                .layout_job(caps(text, 13.0, GOLD, f32::INFINITY));
             ui.painter().galley(at, recolour, GOLD);
         }
     }
@@ -405,18 +597,38 @@ pub fn progress(ui: &mut Ui, part: f32, text: &str) {
     let width = (inside.width() * part.clamp(0.0, 1.0)).max(inside.height());
     let filled = Rect::from_min_size(inside.min, egui::vec2(width, inside.height()));
     painter.rect_filled(filled, round, Color32::from_rgb(214, 140, 48));
-    let top = Rect::from_min_size(filled.min, egui::vec2(filled.width(), filled.height() / 2.0)).shrink2(Vec2::new(5.0, 1.0));
+    let top = Rect::from_min_size(
+        filled.min,
+        egui::vec2(filled.width(), filled.height() / 2.0),
+    )
+    .shrink2(Vec2::new(5.0, 1.0));
     painter.rect_filled(top, round, rgba(255, 236, 170, 70));
     let font = FontId::new(12.0, FontFamily::Name(CAPS_FAMILY.into()));
-    painter.text(rect.center() + egui::vec2(1.0, 1.0), Align2::CENTER_CENTER, text, font.clone(), rgba(0, 0, 0, 200));
-    painter.text(rect.center(), Align2::CENTER_CENTER, text, font, Color32::WHITE);
+    painter.text(
+        rect.center() + egui::vec2(1.0, 1.0),
+        Align2::CENTER_CENTER,
+        text,
+        font.clone(),
+        rgba(0, 0, 0, 200),
+    );
+    painter.text(
+        rect.center(),
+        Align2::CENTER_CENTER,
+        text,
+        font,
+        Color32::WHITE,
+    );
 }
 
 /// A thin metal line between the parts of a panel.
 pub fn rule(ui: &mut Ui) {
     let (rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 5.0), Sense::hover());
     let y = rect.center().y;
-    ui.painter().hline(rect.x_range(), y, Stroke::new(1.0, rgba(133, 122, 149, 110)));
+    ui.painter().hline(
+        rect.x_range(),
+        y,
+        Stroke::new(1.0, rgba(133, 122, 149, 110)),
+    );
 }
 
 /// A picture in a metal frame.
@@ -425,7 +637,8 @@ pub fn framed_image(ui: &mut Ui, texture: &egui::TextureHandle, side: f32) {
     if ui.is_rect_visible(rect) {
         let inside = rect.shrink(3.0);
         ui.painter().rect_filled(rect, CornerRadius::same(4), EDGE);
-        ui.painter().rect_filled(rect.shrink(1.0), CornerRadius::same(3), METAL_DIM);
+        ui.painter()
+            .rect_filled(rect.shrink(1.0), CornerRadius::same(3), METAL_DIM);
         egui::Image::new(texture).paint_at(ui, inside);
     }
 }
@@ -446,8 +659,21 @@ mod tests {
     }
 
     #[test]
-    fn the_built_in_fonts_are_fonts() {
-        assert!(TEKTUR.starts_with(&[0, 1, 0, 0]));
-        assert!(NOTO.starts_with(&[0, 1, 0, 0]));
+    fn the_game_fonts_are_found_and_are_fonts() {
+        // in development the game's tree beside this repository holds them (in a download, the game's folder)
+        let fonts = load_fonts_from(&font_dirs()).unwrap();
+        assert!(is_font(&fonts.caps) && is_font(&fonts.body));
+        assert!(fonts.chinese.as_deref().is_some_and(is_font));
+    }
+
+    #[test]
+    fn missing_fonts_are_named() {
+        let empty = std::env::temp_dir().join("drahtseilakt-toolbox-no-fonts-here");
+        let e = load_fonts_from(std::slice::from_ref(&empty)).err().unwrap();
+        assert!(
+            e.contains(CAPS_FILE) && e.contains(&empty.display().to_string()),
+            "{e}"
+        );
+        assert!(load_fonts_from(&[]).err().unwrap().contains("nowhere"));
     }
 }

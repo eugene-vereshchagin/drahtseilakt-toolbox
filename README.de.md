@@ -28,9 +28,12 @@ vereinfachtem Chinesisch, Französisch, Spanisch und Italienisch, nach der Syste
 Menü des Spiels (Abendhimmel, gerahmte dunkle Tafeln, Pillenknöpfe mit Kugel, die Tektur-Schrift des Spiels) und
 wird von der Toolbox selbst gezeichnet: Es braucht keine Kopie und bringt keine Bilder mit. Seine zwei Abschnitte
 sind „Remaster der Original-Level“ und „Community-Karten importieren“, jeder mit einem Hauptknopf; das
-Real-ESRGAN-Modell und das Relief liegen eingeklappt unter „Erweitert“. Tektur und Noto Sans (die Schriften des
-Spiels, SIL OFL) sind eingebaut; Chinesisch nutzt Noto Sans SC des Spiels, wenn dessen `assets/` neben dem Programm
-liegt, sonst eine Schrift des Systems (Noto CJK, Microsoft YaHei, PingFang...).
+Real-ESRGAN-Modell und das Relief liegen eingeklappt unter „Erweitert“. Keine Schrift ist ins Programm
+eingebaut: das Fenster liest beim Start die Schriftdateien des Spiels (Tektur, Noto Sans und für Chinesisch Noto Sans
+SC; SIL OFL, mit ihren Lizenzen in `assets/fonts/` des Spiels) dort, wo das Spiel seine Ressourcen findet (neben dem
+Programm, im portablen Ordner, im Baum des Spiels beim Bauen aus den Quellen), sonst aus einem Ordner `fonts/` neben
+der Toolbox. Ohne Noto Sans SC nutzt Chinesisch eine Schrift des Systems (Noto CJK, Microsoft YaHei, PingFang...);
+ohne Tektur oder Noto Sans nennt die Toolbox die fehlende Datei und wo sie gesucht hat, und öffnet kein Fenster.
 
 `remaster` wandelt die Original-Level der Kopie nach `levels/ballance-remaster/` des Spiels (offenes Format), gibt jedem
 Level rundere Formen (ins Level neben die ursprünglichen Meshes geschrieben, die die Physik weiter benutzt, sodass
@@ -116,4 +119,5 @@ Das Lesen der Level teilt die Toolbox mit dem Spiel: Sie braucht einen Klon des 
 Code und Dokumentation schreibt **Claude** (das KI-Modell von Anthropic, in Claude Code). **Veresk** führt das
 Projekt: die Idee, die Entscheidungen, der Plan und das Urteil, was stimmt. Die Commits tragen beide Namen.
 
-GPL-3.0-only, wie das Spiel.
+GPL-3.0-only, wie das Spiel. Was sie von anderen nutzt (die gelesenen Schriften, Real-ESRGAN, die Crates) und deren
+Lizenzen: [THIRD-PARTY.md](THIRD-PARTY.md).

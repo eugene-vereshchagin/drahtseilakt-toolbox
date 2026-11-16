@@ -55,13 +55,19 @@ pub struct Sorting<'a> {
 
 /// The unsorted folder beside a levels folder: `levels/downloaded` -> `levels/downloaded-unsorted`.
 pub fn default_unsorted(to: &Path) -> PathBuf {
-    let parent = to.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
+    let parent = to
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
     parent.join("community-unsorted")
 }
 
 /// The modified originals folder beside a levels folder: `levels/downloaded` -> `levels/modified`.
 pub fn default_modified(to: &Path) -> PathBuf {
-    let parent = to.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
+    let parent = to
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
     parent.join("modified")
 }
 
@@ -71,9 +77,17 @@ pub fn default_modified(to: &Path) -> PathBuf {
 fn modified_set(file: &Path, root: &Path) -> Option<String> {
     let is_set = |n: &str| {
         let l = n.to_lowercase();
-        ["45-degree", "rotat", "旋转", "revers", "反向", "invisib", "隐形"]
-            .iter()
-            .any(|w| l.contains(w))
+        [
+            "45-degree",
+            "rotat",
+            "旋转",
+            "revers",
+            "反向",
+            "invisib",
+            "隐形",
+        ]
+        .iter()
+        .any(|w| l.contains(w))
     };
     let inside = file.strip_prefix(root).ok()?.parent()?;
     let own = root.file_name().map(|n| n.to_string_lossy().into_owned());
@@ -87,16 +101,26 @@ fn modified_set(file: &Path, root: &Path) -> Option<String> {
 /// Writes a modified original as `modified/<set>/<file stem>/<file>.nmo` (and its preview), through a hidden folder
 /// renamed into place. A folder name taken by another map gets ` (2)`, ...; the same map again (an earlier run) is left
 /// alone: None. Returns the folder's path below `modified`.
-fn write_modified(modified: &Path, set: &str, file: &Path, bytes: &[u8]) -> Result<Option<PathBuf>, String> {
+fn write_modified(
+    modified: &Path,
+    set: &str,
+    file: &Path,
+    bytes: &[u8],
+) -> Result<Option<PathBuf>, String> {
     let fail = |p: &Path, e: std::io::Error| format!("{}: {e}", p.display());
     let set_dir = modified.join(folder_name(set));
     std::fs::create_dir_all(&set_dir).map_err(|e| fail(&set_dir, e))?;
-    let stem = file.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let stem = file
+        .file_stem()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
     let base = folder_name(&stem);
     let mut name = base.clone();
     let mut n = 2u32;
     while std::fs::symlink_metadata(set_dir.join(&name)).is_ok() {
-        let there = set_dir.join(&name).join(format!("{}.nmo", folder_name(&stem)));
+        let there = set_dir
+            .join(&name)
+            .join(format!("{}.nmo", folder_name(&stem)));
         if read_capped(&there, NMO_MAX).is_ok_and(|b| b == bytes) {
             return Ok(None);
         }
@@ -106,7 +130,11 @@ fn write_modified(modified: &Path, set: &str, file: &Path, bytes: &[u8]) -> Resu
             return Err(format!("{}: no free folder name", set_dir.display()));
         }
     }
-    let tmp = set_dir.join(format!(".import-{}-{}", std::process::id(), fnv1a(name.as_bytes())));
+    let tmp = set_dir.join(format!(
+        ".import-{}-{}",
+        std::process::id(),
+        fnv1a(name.as_bytes())
+    ));
     if std::fs::symlink_metadata(&tmp).is_ok() {
         std::fs::remove_dir_all(&tmp).map_err(|e| fail(&tmp, e))?;
     }
@@ -114,7 +142,10 @@ fn write_modified(modified: &Path, set: &str, file: &Path, bytes: &[u8]) -> Resu
     let result = (|| {
         write_new(&tmp.join(format!("{}.nmo", folder_name(&stem))), bytes)?;
         if let Some(img) = preview(file) {
-            let ext = img.extension().map(|x| x.to_string_lossy().to_lowercase()).unwrap_or_default();
+            let ext = img
+                .extension()
+                .map(|x| x.to_string_lossy().to_lowercase())
+                .unwrap_or_default();
             let ext = if ext == "jpeg" { "jpg".to_owned() } else { ext };
             if let Ok(b) = read_capped(&img, IMAGE_MAX) {
                 write_new(&tmp.join(format!("preview.{ext}")), &b)?;
@@ -146,7 +177,10 @@ pub fn import(
 ) -> Result<Summary, String> {
     let meta = std::fs::metadata(from).map_err(|e| format!("{}: {e}", from.display()))?;
     if !meta.is_dir() {
-        return Err(format!("{}: not a folder (unpack an archive first)", from.display()));
+        return Err(format!(
+            "{}: not a folder (unpack an archive first)",
+            from.display()
+        ));
     }
     // checked before anything is made: the source is only ever read
     let src = canonical(from)?;
@@ -159,7 +193,11 @@ pub fn import(
         ));
     }
     let aside = canonical_to_be(&sorting.unsorted);
-    if aside.starts_with(&src) || src.starts_with(&aside) || aside.starts_with(&to_be) || to_be.starts_with(&aside) {
+    if aside.starts_with(&src)
+        || src.starts_with(&aside)
+        || aside.starts_with(&to_be)
+        || to_be.starts_with(&aside)
+    {
         return Err(format!(
             "{}: the unsorted folder must be beside, not inside, {} and {}",
             sorting.unsorted.display(),
@@ -241,12 +279,18 @@ pub fn import(
             match write_modified(&modified, &set, &m.file, &bytes) {
                 Ok(None) => {
                     tell(format!("already in modified: {}", shown(&rel)));
-                    summary.duplicates.push((rel.clone(), PathBuf::from("modified")));
+                    summary
+                        .duplicates
+                        .push((rel.clone(), PathBuf::from("modified")));
                 }
                 Ok(Some(at)) => {
                     by_hash.entry(key).or_default().push(m.file.clone());
                     summary.modified += 1;
-                    tell(format!("modified/{}  <-  {}", printable(&at.to_string_lossy()), shown(&rel)));
+                    tell(format!(
+                        "modified/{}  <-  {}",
+                        printable(&at.to_string_lossy()),
+                        shown(&rel)
+                    ));
                 }
                 Err(e) => {
                     tell(format!("failed {}: {}", shown(&rel), printable(&e)));
@@ -261,7 +305,10 @@ pub fn import(
         let readme = found.is_none() && has_readme(&m.file);
         if sorting.catalogue.is_some() && found.is_none() && !readme {
             match unsorted.copy(&src, &m.file, Reason::Uncatalogued) {
-                Ok(()) => tell(format!("set aside (not in the catalogue, no readme): {}", shown(&rel))),
+                Ok(()) => tell(format!(
+                    "set aside (not in the catalogue, no readme): {}",
+                    shown(&rel)
+                )),
                 Err(e) => summary.failed.push(format!("{}: {e}", rel.display())),
             }
             continue;
@@ -329,9 +376,21 @@ fn maps_in(dir: &Path) -> usize {
 }
 
 /// The documents counted as a map's readme: a text file, or a document named as a readme or as the map.
-const DOCS: [&str; 10] = ["txt", "md", "nfo", "rtf", "doc", "docx", "odt", "pdf", "htm", "html"];
+const DOCS: [&str; 10] = [
+    "txt", "md", "nfo", "rtf", "doc", "docx", "odt", "pdf", "htm", "html",
+];
 const README_NAMES: [&str; 12] = [
-    "readme", "read me", "read_me", "read-me", "说明", "自述", "介绍", "liesmich", "lisezmoi", "leeme", "прочти",
+    "readme",
+    "read me",
+    "read_me",
+    "read-me",
+    "说明",
+    "自述",
+    "介绍",
+    "liesmich",
+    "lisezmoi",
+    "leeme",
+    "прочти",
     "описание",
 ];
 
@@ -345,7 +404,9 @@ fn is_readme(name: &str, stem: &str) -> bool {
     if !DOCS.contains(&ext) || lower == "level.txt" || base.is_empty() {
         return false;
     }
-    matches!(ext, "txt" | "md" | "nfo") || README_NAMES.iter().any(|r| base.contains(r)) || base == stem.to_lowercase()
+    matches!(ext, "txt" | "md" | "nfo")
+        || README_NAMES.iter().any(|r| base.contains(r))
+        || base == stem.to_lowercase()
 }
 
 /// Whether a plain file beside the map `file` is a readme.
@@ -407,8 +468,14 @@ pub fn summary_line(s: &Summary, to: &Path) -> String {
         s.modified,
         s.duplicates.len(),
         s.set_aside.len(),
-        s.set_aside.iter().filter(|(_, r)| *r == Reason::Archive).count(),
-        s.set_aside.iter().filter(|(_, r)| *r == Reason::Uncatalogued).count(),
+        s.set_aside
+            .iter()
+            .filter(|(_, r)| *r == Reason::Archive)
+            .count(),
+        s.set_aside
+            .iter()
+            .filter(|(_, r)| *r == Reason::Uncatalogued)
+            .count(),
         s.links.len(),
         s.failed.len()
     )
@@ -416,7 +483,11 @@ pub fn summary_line(s: &Summary, to: &Path) -> String {
 
 /// The game's program: the one beside the toolbox, else one on the PATH.
 fn game_program() -> Option<PathBuf> {
-    let name = if cfg!(windows) { "drahtseilakt.exe" } else { "drahtseilakt" };
+    let name = if cfg!(windows) {
+        "drahtseilakt.exe"
+    } else {
+        "drahtseilakt"
+    };
     let beside = std::env::current_exe()
         .ok()
         .and_then(|exe| exe.parent().map(|d| d.join(name)));
@@ -435,7 +506,10 @@ pub fn check_maps(to: &Path, say: &mut dyn FnMut(String)) {
     use std::io::BufRead;
     use std::process::{Command, Stdio};
     let Some(game) = game_program() else {
-        say(format!("map check skipped: the game (drahtseilakt) is not beside the toolbox or on the PATH; run `drahtseilakt --audit-report {}` later", shown(to)));
+        say(format!(
+            "map check skipped: the game (drahtseilakt) is not beside the toolbox or on the PATH; run `drahtseilakt --audit-report {}` later",
+            shown(to)
+        ));
         return;
     };
     say("checking the maps for what the game does not support yet ...".to_owned());
@@ -451,7 +525,11 @@ pub fn check_maps(to: &Path, say: &mut dyn FnMut(String)) {
     };
     if let Some(out) = child.stdout.take() {
         // the game's own words (its language), a line at a time, capped: its bookkeeping lines are left out
-        for l in std::io::BufReader::new(out).lines().take(100_000).map_while(Result::ok) {
+        for l in std::io::BufReader::new(out)
+            .lines()
+            .take(100_000)
+            .map_while(Result::ok)
+        {
             if !l.starts_with("paths:") && !l.starts_with("report:") {
                 say(printable(&l));
             }
@@ -459,18 +537,27 @@ pub fn check_maps(to: &Path, say: &mut dyn FnMut(String)) {
     }
     match child.wait() {
         Ok(st) if st.success() => {}
-        Ok(st) => say(format!("map check ended with {st}: some maps have no report")),
+        Ok(st) => say(format!(
+            "map check ended with {st}: some maps have no report"
+        )),
         Err(e) => say(format!("map check failed: {e}")),
     }
 }
 
 /// Collects the `.nmo` files under `dir`, the archives and the links, never following a link.
-fn walk(dir: &Path, depth: usize, seen: &mut usize, maps: &mut Vec<Found>, s: &mut Summary) -> Result<(), String> {
+fn walk(
+    dir: &Path,
+    depth: usize,
+    seen: &mut usize,
+    maps: &mut Vec<Found>,
+    s: &mut Summary,
+) -> Result<(), String> {
     let read = match std::fs::read_dir(dir) {
         Ok(r) => r,
         // an unreadable folder inside the download is skipped and reported; the download itself must be readable
         Err(e) if depth > 0 => {
-            s.failed.push(format!("{}: {e}, not looked into", dir.display()));
+            s.failed
+                .push(format!("{}: {e}, not looked into", dir.display()));
             return Ok(());
         }
         Err(e) => return Err(format!("{}: {e}", dir.display())),
@@ -492,8 +579,10 @@ fn walk(dir: &Path, depth: usize, seen: &mut usize, maps: &mut Vec<Found>, s: &m
             s.links.push(path);
         } else if kind.is_dir() {
             if depth + 1 >= DEPTH_MAX {
-                s.failed
-                    .push(format!("{}: folders nested too deep, not looked into", path.display()));
+                s.failed.push(format!(
+                    "{}: folders nested too deep, not looked into",
+                    path.display()
+                ));
             } else {
                 walk(&path, depth + 1, seen, maps, s)?;
             }
@@ -534,7 +623,11 @@ fn title_for(file: &Path, root: &Path) -> String {
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
     let stem = match stem.len().checked_sub(6) {
-        Some(at) if stem.get(at..).is_some_and(|t| t.eq_ignore_ascii_case(".level")) => {
+        Some(at)
+            if stem
+                .get(at..)
+                .is_some_and(|t| t.eq_ignore_ascii_case(".level")) =>
+        {
             stem.get(..at).unwrap_or_default().to_owned()
         }
         _ => stem,
@@ -564,16 +657,19 @@ fn generic_number(stem: &str) -> Option<u32> {
     } else {
         s
     };
-    (!rest.is_empty() && rest.len() <= 3 && rest.bytes().all(|b| b.is_ascii_digit())).then(|| rest.parse().ok())?
+    (!rest.is_empty() && rest.len() <= 3 && rest.bytes().all(|b| b.is_ascii_digit()))
+        .then(|| rest.parse().ok())?
 }
 
 /// A collection's name without a trailing "Maps" ("Invisible Maps" -> "Invisible").
 fn strip_maps(c: &str) -> String {
     let t = c.trim();
     match t.len().checked_sub(4) {
-        Some(at) if at > 0 && t.get(at..).is_some_and(|x| x.eq_ignore_ascii_case("maps")) => {
-            t.get(..at).unwrap_or(t).trim_end_matches([' ', '-', '_']).to_owned()
-        }
+        Some(at) if at > 0 && t.get(at..).is_some_and(|x| x.eq_ignore_ascii_case("maps")) => t
+            .get(..at)
+            .unwrap_or(t)
+            .trim_end_matches([' ', '-', '_'])
+            .to_owned(),
         _ => t.to_owned(),
     }
 }
@@ -673,12 +769,21 @@ fn fit_plain(title: &str, max: usize) -> String {
         .trim_start_matches(['.', ' '])
         .trim_end_matches(['.', ' '])
         .to_owned();
-    if name.is_empty() { "Level".to_owned() } else { name }
+    if name.is_empty() {
+        "Level".to_owned()
+    } else {
+        name
+    }
 }
 
 /// Windows' device names, alone or before an extension ("CON", "nul.txt", "COM1", "LPT9.nmo").
 fn reserved(name: &str) -> bool {
-    let base = name.split('.').next().unwrap_or(name).trim_end().to_ascii_uppercase();
+    let base = name
+        .split('.')
+        .next()
+        .unwrap_or(name)
+        .trim_end()
+        .to_ascii_uppercase();
     let numbered = |p: &str| {
         base.strip_prefix(p).is_some_and(|d| {
             matches!(
@@ -687,7 +792,11 @@ fn reserved(name: &str) -> bool {
             )
         })
     };
-    matches!(base.as_str(), "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$") || numbered("COM") || numbered("LPT")
+    matches!(
+        base.as_str(),
+        "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$"
+    ) || numbered("COM")
+        || numbered("LPT")
 }
 
 /// The folder name for `title`, or with ` (2)`, ` (3)`... when that (in any case) is taken, the title cut shorter to
@@ -709,8 +818,10 @@ fn unique(title: &str, taken: &mut HashSet<String>) -> String {
 
 /// The `.nmo` files of the level folders in `dir` (directly in each, links passed over), with their sizes.
 fn existing_maps(dir: &Path) -> Vec<(PathBuf, u64)> {
-    let plain =
-        |e: &std::fs::DirEntry, dir: bool| e.file_type().is_ok_and(|k| if dir { k.is_dir() } else { k.is_file() });
+    let plain = |e: &std::fs::DirEntry, dir: bool| {
+        e.file_type()
+            .is_ok_and(|k| if dir { k.is_dir() } else { k.is_file() })
+    };
     let Ok(read) = std::fs::read_dir(dir) else {
         return Vec::new();
     };
@@ -793,7 +904,11 @@ fn write_level_files(
     lines: &[String],
 ) -> Result<(), String> {
     let fail = |p: &Path, e: std::io::Error| format!("{}: {e}", p.display());
-    let tmp = to.join(format!(".import-{}-{}", std::process::id(), fnv1a(name.as_bytes())));
+    let tmp = to.join(format!(
+        ".import-{}-{}",
+        std::process::id(),
+        fnv1a(name.as_bytes())
+    ));
     if std::fs::symlink_metadata(&tmp).is_ok() {
         std::fs::remove_dir_all(&tmp).map_err(|e| fail(&tmp, e))?;
     }
@@ -885,7 +1000,8 @@ fn write_new(path: &Path, bytes: &[u8]) -> Result<(), String> {
         .create_new(true)
         .open(path)
         .map_err(|e| format!("{}: {e}", path.display()))?;
-    f.write_all(bytes).map_err(|e| format!("{}: {e}", path.display()))
+    f.write_all(bytes)
+        .map_err(|e| format!("{}: {e}", path.display()))
 }
 
 /// A plain file's bytes, refused when it is a link or larger than `cap`.
@@ -896,13 +1012,23 @@ fn read_capped(path: &Path, cap: u64) -> Result<Vec<u8>, String> {
         return Err(format!("{}: not a plain file", path.display()));
     }
     if meta.len() > cap {
-        return Err(format!("{}: larger than {} MiB", path.display(), cap / (1024 * 1024)));
+        return Err(format!(
+            "{}: larger than {} MiB",
+            path.display(),
+            cap / (1024 * 1024)
+        ));
     }
     let file = std::fs::File::open(path).map_err(fail)?;
     let mut bytes = Vec::new();
-    file.take(cap.saturating_add(1)).read_to_end(&mut bytes).map_err(fail)?;
+    file.take(cap.saturating_add(1))
+        .read_to_end(&mut bytes)
+        .map_err(fail)?;
     if u64::try_from(bytes.len()).map_or(true, |n| n > cap) {
-        return Err(format!("{}: grew past {} MiB", path.display(), cap / (1024 * 1024)));
+        return Err(format!(
+            "{}: grew past {} MiB",
+            path.display(),
+            cap / (1024 * 1024)
+        ));
     }
     Ok(bytes)
 }
@@ -913,7 +1039,10 @@ fn canonical_to_be(p: &Path) -> PathBuf {
     let mut at = p;
     loop {
         if let Ok(c) = std::fs::canonicalize(at) {
-            return rest.iter().rev().fold(c, |acc: PathBuf, part| acc.join(part));
+            return rest
+                .iter()
+                .rev()
+                .fold(c, |acc: PathBuf, part| acc.join(part));
         }
         match (at.parent(), at.file_name()) {
             (Some(parent), Some(name)) => {
@@ -967,7 +1096,10 @@ pub fn refresh(
 ) -> Result<Refreshed, String> {
     let meta = std::fs::symlink_metadata(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     if meta.file_type().is_symlink() || !meta.is_dir() {
-        return Err(format!("{}: not a folder (a link is not followed)", dir.display()));
+        return Err(format!(
+            "{}: not a folder (a link is not followed)",
+            dir.display()
+        ));
     }
     let levels = canonical(dir)?;
     let aside = canonical_to_be(unsorted);
@@ -1007,22 +1139,30 @@ pub fn refresh(
         let look = look_at_level(&path);
         // only a folder the toolbox made (its level.txt names a source) is ever moved: a folder given by mistake
         // (a download, a home folder) loses nothing
-        let made = gamedata::package::read_small(&path.join("level.txt"), gamedata::package::INFO_MAX)
-            .is_some_and(|b| source_of(&String::from_utf8_lossy(&b)).is_some());
+        let made =
+            gamedata::package::read_small(&path.join("level.txt"), gamedata::package::INFO_MAX)
+                .is_some_and(|b| source_of(&String::from_utf8_lossy(&b)).is_some());
         if !made {
             r.left.push(format!("{shown_name}: no level.txt with a source = line (not made by import-maps), left alone"));
             continue;
         }
         if !look.one_level {
             match u.move_dir(&path, Reason::NotOneLevel) {
-                Ok(n) => tell(format!("set aside (not a single level): {shown_name} -> {}", printable(&n))),
+                Ok(n) => tell(format!(
+                    "set aside (not a single level): {shown_name} -> {}",
+                    printable(&n)
+                )),
                 Err(e) => r.failed.push(e),
             }
             continue;
         }
         let info_path = path.join("level.txt");
         let info = gamedata::package::read_small(&info_path, gamedata::package::INFO_MAX);
-        let text = info.as_deref().map(String::from_utf8_lossy).unwrap_or_default().into_owned();
+        let text = info
+            .as_deref()
+            .map(String::from_utf8_lossy)
+            .unwrap_or_default()
+            .into_owned();
         let source = source_of(&text);
         let source_file = source
             .as_deref()
@@ -1056,7 +1196,10 @@ pub fn refresh(
                     }
                 }
             } else {
-                r.failed.push(format!("{}: not a plain file of at most 4 KiB, left as it is", info_path.display()));
+                r.failed.push(format!(
+                    "{}: not a plain file of at most 4 KiB, left as it is",
+                    info_path.display()
+                ));
             }
             continue;
         }
@@ -1069,12 +1212,17 @@ pub fn refresh(
                 && f.parent().is_some_and(|d| std::fs::read_dir(d).is_ok())
         });
         if !checked {
-            tell(format!("kept (its source could not be looked at for a readme): {shown_name}"));
+            tell(format!(
+                "kept (its source could not be looked at for a readme): {shown_name}"
+            ));
             r.unverified.push(name);
             continue;
         }
         match u.move_dir(&path, Reason::Uncatalogued) {
-            Ok(n) => tell(format!("set aside (not in the catalogue, no readme): {shown_name} -> {}", printable(&n))),
+            Ok(n) => tell(format!(
+                "set aside (not in the catalogue, no readme): {shown_name} -> {}",
+                printable(&n)
+            )),
             Err(e) => r.failed.push(e),
         }
     }
@@ -1112,7 +1260,10 @@ struct Look {
 
 fn look_at_level(dir: &Path) -> Look {
     let Ok(read) = std::fs::read_dir(dir) else {
-        return Look { one_level: false, readme: false };
+        return Look {
+            one_level: false,
+            readme: false,
+        };
     };
     let (mut nmo, mut gltf, mut readme) = (0usize, false, false);
     for e in read.flatten().take(4096) {
@@ -1138,7 +1289,9 @@ fn look_at_level(dir: &Path) -> Look {
 fn source_of(text: &str) -> Option<String> {
     text.lines().take(64).find_map(|l| {
         let (k, v) = l.split_once('=')?;
-        (k.trim().eq_ignore_ascii_case("source")).then(|| v.trim().to_owned()).filter(|v| !v.is_empty())
+        (k.trim().eq_ignore_ascii_case("source"))
+            .then(|| v.trim().to_owned())
+            .filter(|v| !v.is_empty())
     })
 }
 
@@ -1160,11 +1313,17 @@ fn safe_rel(s: &str) -> Option<PathBuf> {
 /// other lines but those the catalogue gives, within the game's 64 lines and 4 KiB.
 fn merged_info(old: &str, lines: &[String]) -> String {
     let old = old.strip_prefix('\u{feff}').unwrap_or(old);
-    let mut head: Vec<&str> = old.lines().take_while(|l| l.trim_start().starts_with('#')).collect();
+    let mut head: Vec<&str> = old
+        .lines()
+        .take_while(|l| l.trim_start().starts_with('#'))
+        .collect();
     if head.is_empty() {
         head.push(INFO_HEADER);
     }
-    let key_of = |l: &str| l.split_once('=').map(|(k, _)| k.trim().to_ascii_lowercase());
+    let key_of = |l: &str| {
+        l.split_once('=')
+            .map(|(k, _)| k.trim().to_ascii_lowercase())
+    };
     // a key the catalogue gives replaces the old line; one it has nothing for keeps the player's
     let given: Vec<String> = lines.iter().filter_map(|l| key_of(l)).collect();
     let rest: Vec<&str> = old
@@ -1173,8 +1332,9 @@ fn merged_info(old: &str, lines: &[String]) -> String {
         .filter(|l| !l.trim().is_empty() && !key_of(l).is_some_and(|k| given.contains(&k)))
         .collect();
     // the source line first among them, so a cut at the game's caps never loses it
-    let (source, others): (Vec<&str>, Vec<&str>) =
-        rest.into_iter().partition(|l| key_of(l).is_some_and(|k| k == "source"));
+    let (source, others): (Vec<&str>, Vec<&str>) = rest
+        .into_iter()
+        .partition(|l| key_of(l).is_some_and(|k| k == "source"));
     let mut out = String::new();
     let all = head
         .into_iter()
@@ -1215,7 +1375,10 @@ mod tests {
 
     /// Sorting without a catalogue, setting aside beside `dst`.
     fn plain(dst: &Path) -> Sorting<'static> {
-        let name = dst.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let name = dst
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
         Sorting {
             catalogue: None,
             unsorted: dst.with_file_name(format!("{name}-unsorted")),
@@ -1263,13 +1426,22 @@ mod tests {
         assert_eq!(unique("map", &mut taken), "map (2)");
         // a second long title alike: cut shorter, at a word, before a readable number
         let long = "Ballance Skyscraper (3D Maze; Hard Ver.-Blind) v1.2.2";
-        assert_eq!(unique(long, &mut taken), "Ballance Skyscraper (3D Maze; Hard…");
-        assert_eq!(unique(long, &mut taken), "Ballance Skyscraper (3D Maze; Hard… (2)");
+        assert_eq!(
+            unique(long, &mut taken),
+            "Ballance Skyscraper (3D Maze; Hard…"
+        );
+        assert_eq!(
+            unique(long, &mut taken),
+            "Ballance Skyscraper (3D Maze; Hard… (2)"
+        );
     }
 
     #[test]
     fn printed_names_cannot_drive_the_terminal() {
-        assert_eq!(printable("a\u{1b}[2Jb\u{7}\u{202e}"), "a\\u{1b}[2Jb\\u{7}\\u{202e}");
+        assert_eq!(
+            printable("a\u{1b}[2Jb\u{7}\u{202e}"),
+            "a\\u{1b}[2Jb\\u{7}\\u{202e}"
+        );
         assert_eq!(shown(Path::new("ok/name")), "ok/name");
     }
 
@@ -1282,7 +1454,15 @@ mod tests {
         std::fs::create_dir_all(dst.join("Map")).unwrap();
         let mut taken = HashSet::new();
         assert!(matches!(
-            write_level(&dst, "Map", "Map", Path::new("Map.nmo"), b"m", &src.join("Map.nmo"), &[]),
+            write_level(
+                &dst,
+                "Map",
+                "Map",
+                Path::new("Map.nmo"),
+                b"m",
+                &src.join("Map.nmo"),
+                &[]
+            ),
             Err(Written::Exists)
         ));
         let name = write_named(
@@ -1310,10 +1490,12 @@ mod tests {
         std::fs::create_dir_all(src.join("locked")).unwrap();
         std::fs::write(src.join("locked/x.nmo"), b"x").unwrap();
         std::fs::write(src.join("open.nmo"), b"o").unwrap();
-        std::fs::set_permissions(src.join("locked"), std::fs::Permissions::from_mode(0o000)).unwrap();
+        std::fs::set_permissions(src.join("locked"), std::fs::Permissions::from_mode(0o000))
+            .unwrap();
         let readable = std::fs::read_dir(src.join("locked")).is_ok(); // root reads it anyway
         let s = import(&src, &dst, &plain(&dst), &mut |_| {}, &GO);
-        std::fs::set_permissions(src.join("locked"), std::fs::Permissions::from_mode(0o755)).unwrap();
+        std::fs::set_permissions(src.join("locked"), std::fs::Permissions::from_mode(0o755))
+            .unwrap();
         let s = s.unwrap();
         if !readable {
             assert_eq!((s.imported, s.failed.len()), (1, 1));
@@ -1333,12 +1515,18 @@ mod tests {
             title_for(Path::new("/r/Invisible Maps/level 3.nmo"), root),
             "Invisible - Level 03"
         );
-        assert_eq!(title_for(Path::new("/r/S1/W天空峡谷.Level.NMO"), root), "W天空峡谷");
+        assert_eq!(
+            title_for(Path::new("/r/S1/W天空峡谷.Level.NMO"), root),
+            "W天空峡谷"
+        );
         assert_eq!(
             title_for(Path::new("/r/Custom Maps/Hello Mars.NMO"), root),
             "Hello Mars"
         );
-        assert_eq!(title_for(Path::new("/r/反向Level_01.NMO"), root), "反向Level_01");
+        assert_eq!(
+            title_for(Path::new("/r/反向Level_01.NMO"), root),
+            "反向Level_01"
+        );
         assert_eq!(generic_number("Level_13"), Some(13));
         assert_eq!(generic_number("Levels"), None);
         assert_eq!(generic_number("Level_1234"), None);
@@ -1390,11 +1578,23 @@ mod tests {
                 "hello mars (2)"
             ]
         );
-        assert_eq!(std::fs::read(dst.join("Hello Mars/preview.jpg")).unwrap(), b"jpg");
-        assert_eq!(std::fs::read(dst.join("TrackW2/preview.jpg")).unwrap(), b"tj");
-        assert_eq!(std::fs::read(dst.join("Hello Mars/Hello Mars.NMO")).unwrap(), b"mars");
+        assert_eq!(
+            std::fs::read(dst.join("Hello Mars/preview.jpg")).unwrap(),
+            b"jpg"
+        );
+        assert_eq!(
+            std::fs::read(dst.join("TrackW2/preview.jpg")).unwrap(),
+            b"tj"
+        );
+        assert_eq!(
+            std::fs::read(dst.join("Hello Mars/Hello Mars.NMO")).unwrap(),
+            b"mars"
+        );
         let info = std::fs::read_to_string(dst.join("hello mars (2)/level.txt")).unwrap();
-        assert!(!info.contains("title") && info.contains("source = Other"), "{info}");
+        assert!(
+            !info.contains("title") && info.contains("source = Other"),
+            "{info}"
+        );
         // the source is untouched, and a second run makes new names beside the first
         assert!(src.join("Custom Maps/Hello Mars.NMO").exists());
         let again = import(&src, &dst, &plain(&dst), &mut |_| {}, &GO).unwrap();
@@ -1430,9 +1630,18 @@ mod tests {
         let s = import(&src, &dst, &plain(&dst), &mut |l| lines.push(l), &GO).unwrap();
         assert_eq!((s.imported, s.modified), (1, 3), "{lines:?}");
         let m = base.join("levels/modified");
-        assert_eq!(std::fs::read(m.join("45-Degree Rotated Maps/Level_01/Level_01.nmo")).unwrap(), b"r1");
-        assert_eq!(std::fs::read(m.join("45-Degree Rotated Maps/Level_01/preview.jpg")).unwrap(), b"pic");
-        assert_eq!(std::fs::read(m.join("Reverse Maps/反向Level_02(新)/反向Level_02(新).nmo")).unwrap(), b"v2");
+        assert_eq!(
+            std::fs::read(m.join("45-Degree Rotated Maps/Level_01/Level_01.nmo")).unwrap(),
+            b"r1"
+        );
+        assert_eq!(
+            std::fs::read(m.join("45-Degree Rotated Maps/Level_01/preview.jpg")).unwrap(),
+            b"pic"
+        );
+        assert_eq!(
+            std::fs::read(m.join("Reverse Maps/反向Level_02(新)/反向Level_02(新).nmo")).unwrap(),
+            b"v2"
+        );
         assert!(m.join("INVISIBLE maps/Level_03/Level_03.nmo").is_file());
         // Pro Racing stays a community map
         assert!(dst.join("Track/Track.NMO").is_file(), "{lines:?}");
@@ -1447,7 +1656,16 @@ mod tests {
     #[test]
     fn nested_folders_are_refused() {
         let src = temp("nest");
-        assert!(import(&src, &src.join("out"), &plain(&src.join("out")), &mut |_| {}, &GO).is_err());
+        assert!(
+            import(
+                &src,
+                &src.join("out"),
+                &plain(&src.join("out")),
+                &mut |_| {},
+                &GO
+            )
+            .is_err()
+        );
         assert!(!src.join("out").exists(), "nothing is made in the source");
         let _ = std::fs::remove_dir_all(&src);
     }
@@ -1519,7 +1737,11 @@ mod tests {
         };
         let mut lines = Vec::new();
         let s = import(&src, &dst, &sorting, &mut |l| lines.push(l), &GO).unwrap();
-        assert_eq!((s.imported, s.catalogued, s.readme_only), (4, 3, 1), "{lines:?}");
+        assert_eq!(
+            (s.imported, s.catalogued, s.readme_only),
+            (4, 3, 1),
+            "{lines:?}"
+        );
         let pie = std::fs::read_to_string(dst.join("Pie in the Sky/level.txt")).unwrap();
         assert_eq!(
             pie,
@@ -1528,27 +1750,61 @@ mod tests {
         );
         // named after the catalogue's title; matched by the version-less name and by its folder's name
         let bright = std::fs::read_to_string(dst.join("Bright Galaxy/level.txt")).unwrap();
-        assert!(bright.contains("title.zh = 璀璨星河\n") && !bright.contains("difficulty"), "{bright}");
+        assert!(
+            bright.contains("title.zh = 璀璨星河\n") && !bright.contains("difficulty"),
+            "{bright}"
+        );
         assert!(dst.join("Pie in the Sky (2)/W3.NMO").exists());
         let mine = std::fs::read_to_string(dst.join("Mine/level.txt")).unwrap();
-        assert!(!mine.contains("title") && !mine.contains("difficulty"), "{mine}");
+        assert!(
+            !mine.contains("title") && !mine.contains("difficulty"),
+            "{mine}"
+        );
         // copied aside, keeping the source's names; the source untouched
-        assert_eq!(std::fs::read(aside.join("Custom Maps/Nobody Knows.NMO")).unwrap(), b"nobody");
-        assert_eq!(std::fs::read(aside.join("Custom Maps/Packed.zip")).unwrap(), b"zip");
-        assert!(src.join("Custom Maps/Nobody Knows.NMO").exists() && src.join("Custom Maps/Packed.zip").exists());
+        assert_eq!(
+            std::fs::read(aside.join("Custom Maps/Nobody Knows.NMO")).unwrap(),
+            b"nobody"
+        );
+        assert_eq!(
+            std::fs::read(aside.join("Custom Maps/Packed.zip")).unwrap(),
+            b"zip"
+        );
+        assert!(
+            src.join("Custom Maps/Nobody Knows.NMO").exists()
+                && src.join("Custom Maps/Packed.zip").exists()
+        );
         assert!(!dst.join("Nobody Knows").exists());
         let readme = std::fs::read_to_string(aside.join("README.txt")).unwrap();
-        assert!(readme.contains("Custom Maps/Nobody Knows.NMO  —  not in the catalogue"), "{readme}");
-        assert!(readme.contains("Custom Maps/Packed.zip  —  packed archive"), "{readme}");
+        assert!(
+            readme.contains("Custom Maps/Nobody Knows.NMO  —  not in the catalogue"),
+            "{readme}"
+        );
+        assert!(
+            readme.contains("Custom Maps/Packed.zip  —  packed archive"),
+            "{readme}"
+        );
         assert_eq!(s.set_aside.len(), 2);
         // without a catalogue every map is imported; archives are still set aside
         let base2 = temp("cat-base2");
-        let s = import(&src, &base2.join("c"), &plain(&base2.join("c")), &mut |_| {}, &GO).unwrap();
+        let s = import(
+            &src,
+            &base2.join("c"),
+            &plain(&base2.join("c")),
+            &mut |_| {},
+            &GO,
+        )
+        .unwrap();
         assert_eq!((s.imported, s.set_aside.len()), (5, 1));
         // the unsorted folder inside the levels or the source is refused
-        let inside = Sorting { catalogue: None, unsorted: dst.join("u") };
+        let inside = Sorting {
+            catalogue: None,
+            unsorted: dst.join("u"),
+        };
         assert!(import(&src, &dst, &inside, &mut |_| {}, &GO).is_err());
-        let inside = Sorting { catalogue: None, unsorted: src.join("u") };
+        let inside = Sorting {
+            catalogue: None,
+            unsorted: src.join("u"),
+        };
         assert!(import(&src, &dst, &inside, &mut |_| {}, &GO).is_err());
         assert!(!src.join("u").exists());
         let _ = std::fs::remove_dir_all(&src);
@@ -1577,24 +1833,53 @@ mod tests {
         mk(
             &levels,
             "Pie in the Sky/level.txt",
-            format!("{header}title = Old\nversion = 2\nsource = Custom Maps/Pie in the Sky.NMO\n").as_bytes(),
+            format!("{header}title = Old\nversion = 2\nsource = Custom Maps/Pie in the Sky.NMO\n")
+                .as_bytes(),
         );
         mk(&levels, "W3/W3.NMO", b"w");
-        mk(&levels, "W3/level.txt", format!("{header}source = Season/天马行空/W3.NMO\n").as_bytes());
+        mk(
+            &levels,
+            "W3/level.txt",
+            format!("{header}source = Season/天马行空/W3.NMO\n").as_bytes(),
+        );
         mk(&levels, "Nobody/Nobody.NMO", b"n");
-        mk(&levels, "Nobody/level.txt", format!("{header}source = Custom Maps/Nobody.NMO\n").as_bytes());
+        mk(
+            &levels,
+            "Nobody/level.txt",
+            format!("{header}source = Custom Maps/Nobody.NMO\n").as_bytes(),
+        );
         mk(&levels, "Mine/Mine.NMO", b"m");
-        mk(&levels, "Mine/level.txt", format!("{header}source = Docs/Mine.NMO\n").as_bytes());
+        mk(
+            &levels,
+            "Mine/level.txt",
+            format!("{header}source = Docs/Mine.NMO\n").as_bytes(),
+        );
         mk(&levels, "Own Readme/x.nmo", b"x");
         mk(&levels, "Own Readme/README.txt", b"r");
-        mk(&levels, "Own Readme/level.txt", format!("{header}source = Elsewhere/x.nmo\n").as_bytes());
+        mk(
+            &levels,
+            "Own Readme/level.txt",
+            format!("{header}source = Elsewhere/x.nmo\n").as_bytes(),
+        );
         mk(&levels, "Lost/Lost.NMO", b"l");
-        mk(&levels, "Lost/level.txt", format!("{header}source = Custom Maps/Gone.NMO\n").as_bytes());
+        mk(
+            &levels,
+            "Lost/level.txt",
+            format!("{header}source = Custom Maps/Gone.NMO\n").as_bytes(),
+        );
         mk(&levels, "Escape/E.NMO", b"e");
-        mk(&levels, "Escape/level.txt", format!("{header}source = ../../etc/passwd\n").as_bytes());
+        mk(
+            &levels,
+            "Escape/level.txt",
+            format!("{header}source = ../../etc/passwd\n").as_bytes(),
+        );
         mk(&levels, "Two/a.nmo", b"a");
         mk(&levels, "Two/b.nmo", b"b");
-        mk(&levels, "Two/level.txt", format!("{header}source = Two/a.nmo\n").as_bytes());
+        mk(
+            &levels,
+            "Two/level.txt",
+            format!("{header}source = Two/a.nmo\n").as_bytes(),
+        );
         mk(&levels, "Not Mine/a.nmo", b"a");
         mk(&levels, "Not Mine/b.nmo", b"b");
         std::fs::create_dir_all(levels.join("Empty")).unwrap();
@@ -1603,7 +1888,14 @@ mod tests {
         let mut lines = Vec::new();
         let r = refresh(&levels, &c, Some(&src), &aside, &mut |l| lines.push(l), &GO).unwrap();
         assert_eq!(
-            (r.levels, r.catalogued, r.rewritten, r.readme_only, r.unverified.len(), r.set_aside.len()),
+            (
+                r.levels,
+                r.catalogued,
+                r.rewritten,
+                r.readme_only,
+                r.unverified.len(),
+                r.set_aside.len()
+            ),
             (10, 2, 2, 2, 2, 2),
             "{lines:?} {r:?}"
         );
@@ -1614,14 +1906,28 @@ mod tests {
                  source = Custom Maps/Pie in the Sky.NMO\nversion = 2\n"
             )
         );
-        assert!(std::fs::read_to_string(levels.join("W3/level.txt")).unwrap().contains("title = Pie in the Sky\n"));
+        assert!(
+            std::fs::read_to_string(levels.join("W3/level.txt"))
+                .unwrap()
+                .contains("title = Pie in the Sky\n")
+        );
         // moved, never deleted; the maps kept where they were
-        assert_eq!(std::fs::read(aside.join("Nobody/Nobody.NMO")).unwrap(), b"n");
+        assert_eq!(
+            std::fs::read(aside.join("Nobody/Nobody.NMO")).unwrap(),
+            b"n"
+        );
         assert!(aside.join("Two/a.nmo").exists());
         // folders the toolbox did not make are left alone, whatever they hold
         assert!(levels.join("Empty").is_dir() && levels.join("Not Mine/a.nmo").exists());
         assert_eq!(r.left.len(), 2, "{:?}", r.left);
-        for kept in ["Mine", "Own Readme", "Lost", "Escape", "Pie in the Sky", "W3"] {
+        for kept in [
+            "Mine",
+            "Own Readme",
+            "Lost",
+            "Escape",
+            "Pie in the Sky",
+            "W3",
+        ] {
             assert!(levels.join(kept).is_dir(), "{kept}");
         }
         assert!(levels.join("README.txt").is_file() && src.join("Custom Maps/Nobody.NMO").exists());
@@ -1631,7 +1937,12 @@ mod tests {
         let readme = std::fs::read_to_string(aside.join("README.txt")).unwrap();
         assert_eq!(readme.matches("\n- ").count(), 2, "{readme}");
         // without the source collection nothing can be checked for a readme: nothing more is moved
-        assert!(refresh(&levels, &c, None, &aside, &mut |_| {}, &GO).unwrap().set_aside.is_empty());
+        assert!(
+            refresh(&levels, &c, None, &aside, &mut |_| {}, &GO)
+                .unwrap()
+                .set_aside
+                .is_empty()
+        );
         // the unsorted folder inside the levels is refused
         assert!(refresh(&levels, &c, Some(&src), &levels.join("u"), &mut |_| {}, &GO).is_err());
         let _ = std::fs::remove_dir_all(&src);
@@ -1640,16 +1951,28 @@ mod tests {
 
     #[test]
     fn merged_level_txt_stays_in_the_game_s_caps() {
-        let old = format!("# c\n# d\ntitle = x\nAuthor = y\n{}source = s\n", "k = v\n".repeat(200));
+        let old = format!(
+            "# c\n# d\ntitle = x\nAuthor = y\n{}source = s\n",
+            "k = v\n".repeat(200)
+        );
         let m = merged_info(&old, &["title = T".into(), "difficulty = 3".into()]);
         // the player's author kept (the catalogue gives none here); the source kept ahead of the cut
-        assert!(m.starts_with("# c\n# d\ntitle = T\ndifficulty = 3\nsource = s\nAuthor = y\n"), "{m}");
+        assert!(
+            m.starts_with("# c\n# d\ntitle = T\ndifficulty = 3\nsource = s\nAuthor = y\n"),
+            "{m}"
+        );
         assert!(m.lines().count() <= 64 && m.len() <= 4096);
-        assert_eq!(merged_info("", &["title = T".into()]), format!("{INFO_HEADER}\ntitle = T\n"));
+        assert_eq!(
+            merged_info("", &["title = T".into()]),
+            format!("{INFO_HEADER}\ntitle = T\n")
+        );
         assert_eq!(safe_rel("a/b.nmo"), Some(PathBuf::from("a/b.nmo")));
         for bad in ["", "/etc/passwd", "../x", "a/../../x", "./a"] {
             assert_eq!(safe_rel(bad), None, "{bad}");
         }
-        assert_eq!(source_of("# x\nSource = A/B.NMO\nsource = other\n").as_deref(), Some("A/B.NMO"));
+        assert_eq!(
+            source_of("# x\nSource = A/B.NMO\nsource = other\n").as_deref(),
+            Some("A/B.NMO")
+        );
     }
 }

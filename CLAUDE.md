@@ -9,6 +9,9 @@ plays" is why this program exists). Owner: Veresk. Chat in Russian; code, commen
   names, which it only reads) `levels/user-levels/`. It never touches the original copy, never ships game data, and
   never goes online. Third-party programs it runs (Real-ESRGAN) are pinned in `third-party.txt` (URL, version,
   SHA-256), unpacked into `third_party/` (never committed) and looked for beside the program, then on the PATH.
+- **No font compiled in** (eframe without `default_fonts`): the window reads the game's OFL fonts at run time
+  (`src/theme.rs`). `THIRD-PARTY.md` lists fonts, programs and crates; regenerate its crate part after a Cargo.lock
+  change (the command is in the file).
 - **Security** (secure-codegen rules, as the game): no `unsafe`; no `unwrap`/`expect` on input-derived values;
   level folders are hostile (shared by strangers): never follow or write through links, write beside and move into
   place, fail closed. Parser and file-layer changes are level C: independent review before commit.

@@ -72,8 +72,19 @@ pub fn run(
         cancel: &cancel,
     };
     let root = gamedata::profile::dir(gamedata::profile::Kind::Remastered);
-    let mut out = run_in(data, &root, factor, model, relief_strength, only, &mut watch)?;
-    out.push(original_sounds(data, &gamedata::profile::data_dir().join("sounds"))?);
+    let mut out = run_in(
+        data,
+        &root,
+        factor,
+        model,
+        relief_strength,
+        only,
+        &mut watch,
+    )?;
+    out.push(original_sounds(
+        data,
+        &gamedata::profile::data_dir().join("sounds"),
+    )?);
     Ok(out)
 }
 
@@ -87,7 +98,11 @@ pub fn original_sounds(data: &Data, sounds: &Path) -> Result<String, String> {
     let Some(from) = data.file("Sounds").filter(|p| real_dir(p)) else {
         return Ok("sounds: the copy has no Sounds folder; no original theme made".into());
     };
-    for dir in [sounds.to_path_buf(), sounds.join("original"), sounds.join("original").join("Sounds")] {
+    for dir in [
+        sounds.to_path_buf(),
+        sounds.join("original"),
+        sounds.join("original").join("Sounds"),
+    ] {
         match std::fs::symlink_metadata(&dir) {
             Ok(m) if m.is_dir() => {}
             Ok(_) => return Err(format!("{}: not a folder", dir.display())),
@@ -102,7 +117,8 @@ pub fn original_sounds(data: &Data, sounds: &Path) -> Result<String, String> {
         .filter(|n| {
             n.to_ascii_lowercase().ends_with(".wav")
                 && !n.starts_with('.')
-                && n.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | ' '))
+                && n.chars()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | ' '))
         })
         .take(1024)
         .collect();
@@ -110,14 +126,19 @@ pub fn original_sounds(data: &Data, sounds: &Path) -> Result<String, String> {
     let mut copied = 0usize;
     for n in &names {
         let src = from.join(n);
-        let small = std::fs::symlink_metadata(&src).is_ok_and(|m| m.is_file() && m.len() <= SOUND_MAX);
+        let small =
+            std::fs::symlink_metadata(&src).is_ok_and(|m| m.is_file() && m.len() <= SOUND_MAX);
         if !small {
             continue;
         }
         // the game asks for `<name>.wav`: the file keeps its name with the extension in lower case
         let stem = n.get(..n.len().saturating_sub(4)).unwrap_or(n);
         let to = theme.join("Sounds").join(format!("{stem}.wav"));
-        if replace(&to, |t| std::fs::copy(&src, t).map(drop).map_err(|e| e.to_string())).is_ok() {
+        if replace(&to, |t| {
+            std::fs::copy(&src, t).map(drop).map_err(|e| e.to_string())
+        })
+        .is_ok()
+        {
             copied += 1;
         }
     }
@@ -125,8 +146,13 @@ pub fn original_sounds(data: &Data, sounds: &Path) -> Result<String, String> {
                name.en Original\nname.ru Оригинальная\nname.de Original\nname.zh 原版\n\
                author Cyparade / Atari (the player's own copy)\nlicence the player's own copy, not to be shared\n\
                fallback system\n";
-    replace(&theme.join("theme.txt"), |t| std::fs::write(t, txt).map_err(|e| e.to_string()))?;
-    Ok(format!("{}: {copied} of the copy's sounds", theme.display()))
+    replace(&theme.join("theme.txt"), |t| {
+        std::fs::write(t, txt).map_err(|e| e.to_string())
+    })?;
+    Ok(format!(
+        "{}: {copied} of the copy's sounds",
+        theme.display()
+    ))
 }
 
 /// [`run`] into the remastered folder `root`, reporting to `watch` and stopping when it is cancelled.
@@ -150,7 +176,9 @@ pub fn run_in(
     let wanted = |name: &str| {
         only.is_empty()
             || only.iter().any(|w| {
-                w == name || w.parse::<u32>().is_ok_and(|n| format!("Level_{n:02}") == name)
+                w == name
+                    || w.parse::<u32>()
+                        .is_ok_and(|n| format!("Level_{n:02}") == name)
             })
     };
     let line = |out: &mut Vec<String>, watch: &mut Watch<'_>, l: String| {
@@ -159,7 +187,9 @@ pub fn run_in(
     };
     for n in 1..=data.level_count().unwrap_or(13) {
         let dir = root.join(format!("Level_{n:02}"));
-        if !wanted(&format!("Level_{n:02}")) || std::fs::symlink_metadata(dir.join("level.gltf")).is_ok() {
+        if !wanted(&format!("Level_{n:02}"))
+            || std::fs::symlink_metadata(dir.join("level.gltf")).is_ok()
+        {
             continue;
         }
         let Some(loaded) = from_copy(data, n) else {
@@ -266,7 +296,11 @@ pub fn run_in(
             Ok((n, bytes)) => line(
                 &mut out,
                 watch,
-                format!("{}: {n} textures compressed for the graphics card ({} MB)", dir.display(), bytes / (1024 * 1024)),
+                format!(
+                    "{}: {n} textures compressed for the graphics card ({} MB)",
+                    dir.display(),
+                    bytes / (1024 * 1024)
+                ),
             ),
             Err(e) => line(
                 &mut out,
@@ -305,9 +339,17 @@ pub fn run_in(
 /// rounder shapes, textures `factor` times larger from `textures.original/` (kept there; a second run starts from them
 /// again, so nothing is grown twice), masonry relief (and the brightness relief when `relief_strength` > 0) and the
 /// compressed textures. Only looks and pictures change; the level's physics stays what it was. Returns the lines.
-pub fn remaster_folder(dir: &Path, factor: u32, model: &str, relief_strength: f32) -> Result<Vec<String>, String> {
+pub fn remaster_folder(
+    dir: &Path,
+    factor: u32,
+    model: &str,
+    relief_strength: f32,
+) -> Result<Vec<String>, String> {
     if !real_dir(dir) || !real_file(&dir.join("level.gltf")) {
-        return Err(format!("{}: not an open-format level folder", dir.display()));
+        return Err(format!(
+            "{}: not an open-format level folder",
+            dir.display()
+        ));
     }
     let mut out = Vec::new();
     if let Ok(mut m) = GROWN.lock() {
@@ -321,10 +363,15 @@ pub fn remaster_folder(dir: &Path, factor: u32, model: &str, relief_strength: f3
     let source = dir.join(gamedata::assets::SOURCE_HASH_FILE);
     if std::fs::symlink_metadata(&source).is_err() {
         let hash = gamedata::assets::load_open(dir)?.hash;
-        replace(&source, |t| std::fs::write(t, format!("{hash:016x}\n")).map_err(|e| e.to_string()))?;
+        replace(&source, |t| {
+            std::fs::write(t, format!("{hash:016x}\n")).map_err(|e| e.to_string())
+        })?;
     }
     let cancel = AtomicBool::new(false);
-    let mut watch = Watch { report: &mut |_| {}, cancel: &cancel };
+    let mut watch = Watch {
+        report: &mut |_| {},
+        cancel: &cancel,
+    };
     let esrgan = esrgan();
     if let Some(prog) = &esrgan {
         has_model(prog, model)?;
@@ -337,21 +384,38 @@ pub fn remaster_folder(dir: &Path, factor: u32, model: &str, relief_strength: f3
         out.push(format!(
             "{}: {n} textures x{factor} ({})",
             dir.display(),
-            if esrgan.is_some() { "Real-ESRGAN" } else { "Lanczos" }
+            if esrgan.is_some() {
+                "Real-ESRGAN"
+            } else {
+                "Lanczos"
+            }
         ));
     }
     let n = relief(dir, factor, relief_strength)?;
     out.push(format!("{}: {n} normal maps", dir.display()));
     let (n, bytes) = compress(dir, &mut watch)?;
-    out.push(format!("{}: {n} compressed textures ({} MB)", dir.display(), bytes / (1024 * 1024)));
+    out.push(format!(
+        "{}: {n} compressed textures ({} MB)",
+        dir.display(),
+        bytes / (1024 * 1024)
+    ));
     Ok(out)
 }
 
 /// `remaster-nmo`: the sidecar `<map>.remaster/` of a community map, made anew from the map each time (one left from
 /// before is removed, links in it never followed), then remastered as an open-format folder. The map is only read; the
 /// game files its scripts or parts need are not copied (the sidecar only gives looks).
-pub fn remaster_nmo(file: &Path, factor: u32, model: &str, relief_strength: f32) -> Result<Vec<String>, String> {
-    if !real_file(file) || file.extension().is_none_or(|e| !e.eq_ignore_ascii_case("nmo")) {
+pub fn remaster_nmo(
+    file: &Path,
+    factor: u32,
+    model: &str,
+    relief_strength: f32,
+) -> Result<Vec<String>, String> {
+    if !real_file(file)
+        || file
+            .extension()
+            .is_none_or(|e| !e.eq_ignore_ascii_case("nmo"))
+    {
         return Err(format!("{}: not a .nmo file", file.display()));
     }
     // a map made for the original's textures, with no copy: the game's own textures by name, as the game draws it
@@ -375,7 +439,9 @@ pub fn remaster_nmo(file: &Path, factor: u32, model: &str, relief_strength: f32)
     }
     let dir = file.with_extension("remaster");
     match std::fs::symlink_metadata(&dir) {
-        Ok(m) if m.is_dir() => std::fs::remove_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?,
+        Ok(m) if m.is_dir() => {
+            std::fs::remove_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?
+        }
         Ok(_) => return Err(format!("{}: is not a folder", dir.display())),
         Err(_) => {}
     }
@@ -435,7 +501,10 @@ fn game_files(
         }
         match compress(&part_dir, watch) {
             Ok((n, _)) => compressed += n,
-            Err(e) => out.push(format!("{}: textures not compressed: {e}", part_dir.display())),
+            Err(e) => out.push(format!(
+                "{}: textures not compressed: {e}",
+                part_dir.display()
+            )),
         }
     }
     if real_dirs(root, &game).is_ok() {
@@ -566,18 +635,28 @@ fn write_level(dir: &Path, level: &level::Level) -> Result<(), String> {
 /// One remastered level's folder: its relief made again, its normal maps removed from the level first.
 pub fn relief_folder(dir: &Path, scale: u32, strength: f32) -> Result<usize, String> {
     // a remastered level's own folder only (the toolbox made it: its originals kept beside), never a link to one
-    if !real_dir(dir) || !real_dir(&dir.join("textures.original")) || !real_file(&dir.join("level.gltf")) {
-        return Err(format!("{}: not a remastered level's folder", dir.display()));
+    if !real_dir(dir)
+        || !real_dir(&dir.join("textures.original"))
+        || !real_file(&dir.join("level.gltf"))
+    {
+        return Err(format!(
+            "{}: not a remastered level's folder",
+            dir.display()
+        ));
     }
     let mut level = level::open::import(dir)?;
     // the textures that were only normal maps go, with their files, so that a second run does not add another set
-    let used_as_normal: std::collections::HashSet<usize> = level.materials.iter().filter_map(|m| m.normal).collect();
+    let used_as_normal: std::collections::HashSet<usize> =
+        level.materials.iter().filter_map(|m| m.normal).collect();
     let used_as_texture: std::collections::HashSet<usize> =
         level.materials.iter().filter_map(|m| m.texture).collect();
     // texture files are named by their index: only the normal maps at the end (where the relief puts them) can go
     // without renaming the others; any before them are left as they are
     let n = level.textures.len();
-    let tail_from = (0..n).rev().take_while(|i| used_as_normal.contains(i) && !used_as_texture.contains(i)).last();
+    let tail_from = (0..n)
+        .rev()
+        .take_while(|i| used_as_normal.contains(i) && !used_as_texture.contains(i))
+        .last();
     let mut map = Vec::with_capacity(n);
     let mut kept = Vec::new();
     for (i, t) in std::mem::take(&mut level.textures).into_iter().enumerate() {
@@ -622,7 +701,8 @@ fn relief(dir: &Path, scale: u32, strength: f32) -> Result<usize, String> {
         return Err("textures/ missing or a link".into());
     }
     // each texture's map once: its index and whether it is masonry (drawn with parallax)
-    let mut made: std::collections::HashMap<usize, (usize, bool)> = std::collections::HashMap::new();
+    let mut made: std::collections::HashMap<usize, (usize, bool)> =
+        std::collections::HashMap::new();
     for k in 0..level.materials.len() {
         let Some(m) = level.materials.get(k) else {
             continue;
@@ -905,7 +985,11 @@ fn level(
             );
             let before = GROWN.lock().ok().and_then(|g| g.get(&same).cloned());
             if let Some(first) = before.filter(|f| *f != path && real_file(f)) {
-                return replace(&path, |t| std::fs::copy(&first, t).map(drop).map_err(|e| e.to_string()));
+                return replace(&path, |t| {
+                    std::fs::copy(&first, t)
+                        .map(drop)
+                        .map_err(|e| e.to_string())
+                });
             }
             let big = match esrgan.filter(|_| !tiny) {
                 Some((prog, model)) => esrgan_upscale(prog, model, &source, factor, &tmp)
@@ -948,7 +1032,13 @@ fn level(
 }
 
 /// What makes a grown picture: its source's pixels (hash and size), the factor, the model, the file's format.
-type GrownKey = (u64, (u32, u32), u32, Option<String>, Option<std::ffi::OsString>);
+type GrownKey = (
+    u64,
+    (u32, u32),
+    u32,
+    Option<String>,
+    Option<std::ffi::OsString>,
+);
 /// The pictures grown in this run, and the compressed textures made (by their picture file's length and hash).
 static GROWN: std::sync::Mutex<std::collections::BTreeMap<GrownKey, PathBuf>> =
     std::sync::Mutex::new(std::collections::BTreeMap::new());
@@ -967,7 +1057,8 @@ fn compress(dir: &Path, watch: &mut Watch<'_>) -> Result<(usize, u64), String> {
     if !real_dir(&dir.join("textures")) {
         return Err("textures/ missing or a link".into());
     }
-    let normals: std::collections::HashSet<usize> = level.materials.iter().filter_map(|m| m.normal).collect();
+    let normals: std::collections::HashSet<usize> =
+        level.materials.iter().filter_map(|m| m.normal).collect();
     let (mut count, mut bytes) = (0usize, 0u64);
     for (i, t) in level.textures.iter().enumerate() {
         if watch.stopped() {
@@ -990,7 +1081,9 @@ fn compress(dir: &Path, watch: &mut Watch<'_>) -> Result<(usize, u64), String> {
                 use std::io::Read;
                 let mut head = [0u8; gputex::HEADER_LEN];
                 real_file(p)
-                    && std::fs::File::open(p).and_then(|mut f| f.read_exact(&mut head)).is_ok()
+                    && std::fs::File::open(p)
+                        .and_then(|mut f| f.read_exact(&mut head))
+                        .is_ok()
                     && gputex::header(&head).is_ok_and(|h| {
                         (h.source_len, h.source_hash) == source
                             && std::fs::metadata(p).is_ok_and(|m| m.len() == h.file_len())
@@ -1003,19 +1096,28 @@ fn compress(dir: &Path, watch: &mut Watch<'_>) -> Result<(usize, u64), String> {
             let same = (source.0, source.1, fine);
             let before = COMPRESSED.lock().ok().and_then(|c| c.get(&same).cloned());
             if let Some(first) = before.filter(|f| made(f)) {
-                replace(&dtx, |tmp| std::fs::copy(&first, tmp).map(drop).map_err(|e| e.to_string()))?;
+                replace(&dtx, |tmp| {
+                    std::fs::copy(&first, tmp)
+                        .map(drop)
+                        .map_err(|e| e.to_string())
+                })?;
                 return Ok(std::fs::metadata(&dtx).ok().map(|m| m.len()));
             }
             let img = load(path)?;
             let (w, h) = img.dimensions();
-            if u64::from(w) * u64::from(h) < crate::bc::MIN_PIXELS || !w.is_multiple_of(4) || !h.is_multiple_of(4) {
+            if u64::from(w) * u64::from(h) < crate::bc::MIN_PIXELS
+                || !w.is_multiple_of(4)
+                || !h.is_multiple_of(4)
+            {
                 return Ok(None);
             }
             let format = crate::bc::format_for(img.as_raw(), fine);
             let levels = crate::bc::encode(w, h, img.as_raw(), format).ok_or("not whole blocks")?;
             let out = gputex::write(format, w, h, source, &levels)?;
             let len = out.len() as u64;
-            replace(&dtx, |tmp| std::fs::write(tmp, &out).map_err(|e| e.to_string()))?;
+            replace(&dtx, |tmp| {
+                std::fs::write(tmp, &out).map_err(|e| e.to_string())
+            })?;
             if let Ok(mut c) = COMPRESSED.lock() {
                 c.insert(same, dtx.clone());
             }
@@ -1402,10 +1504,7 @@ mod tests {
         // an empty copy of the game: no originals (a level not made from the copy gets no parts)
         let copy = root.join("copy");
         std::fs::create_dir_all(&copy).unwrap();
-        (
-            root,
-            Data::new(Some(copy)),
-        )
+        (root, Data::new(Some(copy)))
     }
 
     #[test]
@@ -1480,7 +1579,8 @@ mod tests {
 
     #[test]
     fn the_original_sound_theme_is_made_from_the_copy() {
-        let root = std::env::temp_dir().join(format!("drahtseilakt-osounds-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("drahtseilakt-osounds-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("copy/Sounds")).unwrap();
         std::fs::write(root.join("copy/Sounds/Misc_Fall.WAV"), b"RIFF").unwrap();
@@ -1491,7 +1591,11 @@ mod tests {
         assert!(line.contains("1 of"), "{line}");
         assert!(sounds.join("original/Sounds/Misc_Fall.wav").is_file());
         assert!(!sounds.join("original/Sounds/readme.txt").exists());
-        assert!(std::fs::read_to_string(sounds.join("original/theme.txt")).unwrap().contains("fallback system"));
+        assert!(
+            std::fs::read_to_string(sounds.join("original/theme.txt"))
+                .unwrap()
+                .contains("fallback system")
+        );
         // a link where the theme goes is refused, never written through
         #[cfg(unix)]
         {
