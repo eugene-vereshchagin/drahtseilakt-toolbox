@@ -21,9 +21,10 @@ level = { path = "../drahtseilakt/crates/level" }
 glam = "=0.34.1"
 image = { version = "=0.25.10", default-features = false, features = ["bmp", "tga", "png", "jpeg"] }
 serde_json = "=1.0.154"
-# the window: egui on wgpu (as the game draws), X11 and Wayland, egui's own fonts; no links (nothing opens a browser),
+# the window: egui on wgpu (as the game draws), X11 and Wayland; no fonts compiled in (the window reads the game's font
+# files at run time, see src/theme.rs); no links (nothing opens a browser),
 # no system font provider (the window finds a font itself, never downloads one)
-eframe = { version = "=0.37.0", default-features = false, features = ["wgpu", "x11", "wayland", "default_fonts"] }
+eframe = { version = "=0.37.0", default-features = false, features = ["wgpu", "x11", "wayland"] }
 # the system's file chooser (folder or CD image): the desktop portal on Linux, native on Windows and macOS; no GTK
 rfd = { version = "=0.17.2", default-features = false, features = ["xdg-portal"] }
 

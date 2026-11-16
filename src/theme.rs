@@ -2,20 +2,23 @@
 // peach), a dark band down the middle, framed dark panels, pill buttons with a metal rim and a ball (gold on the one
 // under the cursor), labels in the game's interface face (Tektur, bold, lower case as small capitals, spaced).
 // Nothing is read from the player's copy and no picture is shipped: the shapes are egui's, the colours are measured
-// on the game's own menu art. The fonts are the game's (its assets/fonts, SIL OFL): Tektur and Noto Sans are built
-// in, so the first window already looks right; Chinese comes from the game's Noto Sans SC beside the program, else
-// from a font the system has (never downloaded).
+// on the game's own menu art. The fonts are the game's (its assets/fonts, SIL OFL: Tektur, Noto Sans, Noto Sans SC),
+// read at run time from where the game keeps them, never compiled in (nor egui's own fonts): the program stays
+// GPL-only and the fonts ship as separate files beside their licences. Chinese falls back to a font the system has.
+// Nothing is ever downloaded.
 
 use eframe::egui::{
     self, Align2, Color32, CornerRadius, FontFamily, FontId, Pos2, Rect, Response, Sense, Stroke, StrokeKind, Ui,
     Vec2,
 };
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-/// The game's interface face and its body face (the game's assets/fonts; the licences lie beside them there).
-const TEKTUR: &[u8] = include_bytes!("../../drahtseilakt/assets/fonts/Tektur-Variable.ttf");
-const NOTO: &[u8] = include_bytes!("../../drahtseilakt/assets/fonts/NotoSans-Regular.ttf");
+/// The game's font files the window reads (its assets/fonts; the licences lie beside them there): the interface face,
+/// the body face (Latin, Cyrillic, Greek, the dashes of the texts) and Chinese.
+const CAPS_FILE: &str = "Tektur-Variable.ttf";
+const BODY_FILE: &str = "NotoSans-Regular.ttf";
+const CHINESE_FILE: &str = "NotoSansSC-Regular.otf";
 /// Tektur's weight, as the game sets it; the small capitals' size against the capitals (the game's 0.8); the space
 /// between letters as a fraction of the size.
 const WEIGHT: f32 = 700.0;
@@ -79,43 +82,79 @@ fn read_font(path: &Path) -> Option<Vec<u8>> {
     (u64::try_from(bytes.len()).ok()? <= FONT_MAX).then_some(bytes)
 }
 
-/// The font for Chinese: the game's own beside the program, else the first the system has.
-fn chinese_font() -> Option<Vec<u8>> {
-    gamedata::resources::assets_root()
-        .and_then(|a| read_font(&a.join("fonts").join("NotoSansSC-Regular.otf")))
-        .or_else(|| CJK_FONTS.iter().find_map(|p| read_font(Path::new(p))))
+/// A font file's first bytes: TrueType, OpenType (CFF), a collection.
+fn is_font(bytes: &[u8]) -> bool {
+    [&[0u8, 1, 0, 0][..], b"OTTO", b"true", b"ttcf"].iter().any(|m| bytes.starts_with(m))
+}
+
+/// Where the game's fonts are looked for, in order: the game's assets folder, found as the game finds it (beside the
+/// program, in the portable folder or the macOS bundle, the game's tree in development), then a `fonts` folder beside
+/// the program (a toolbox download carries one, with the licences).
+fn font_dirs() -> Vec<PathBuf> {
+    let mut dirs: Vec<PathBuf> = gamedata::resources::assets_root().map(|a| a.join("fonts")).into_iter().collect();
+    if let Some(dir) = std::env::current_exe().ok().as_deref().and_then(Path::parent) {
+        dirs.push(dir.join("fonts"));
+    }
+    dirs
+}
+
+/// The window's fonts, read before it opens.
+pub struct Fonts {
+    caps: Vec<u8>,
+    body: Vec<u8>,
+    chinese: Option<Vec<u8>>,
+}
+
+/// Reads the window's fonts from where the game keeps them; Chinese, if the game's is missing, from the system.
+pub fn load_fonts() -> Result<Fonts, String> {
+    let mut fonts = load_fonts_from(&font_dirs())?;
+    if fonts.chinese.is_none() {
+        fonts.chinese = CJK_FONTS.iter().find_map(|p| read_font(Path::new(p)).filter(|b| is_font(b)));
+    }
+    Ok(fonts)
+}
+
+/// The fonts from the first of `dirs` that has each; an error names the missing file and every folder looked in.
+fn load_fonts_from(dirs: &[PathBuf]) -> Result<Fonts, String> {
+    let find = |name: &str| dirs.iter().find_map(|d| read_font(&d.join(name)).filter(|b| is_font(b)));
+    let need = |name: &str| {
+        find(name).ok_or_else(|| {
+            let looked: Vec<String> = dirs.iter().map(|d| d.display().to_string()).collect();
+            let looked = if looked.is_empty() { "nowhere: no folder found".to_owned() } else { looked.join(", ") };
+            format!(
+                "the font {name} was not found (looked in: {looked}). The toolbox draws its window with the game's \
+                 fonts (the game's assets/fonts folder): keep the toolbox in the game's folder, or its fonts folder \
+                 beside it"
+            )
+        })
+    };
+    Ok(Fonts { caps: need(CAPS_FILE)?, body: need(BODY_FILE)?, chinese: find(CHINESE_FILE) })
 }
 
 /// Sets the window's fonts and look, once.
-pub fn apply(ctx: &egui::Context) {
+pub fn apply(ctx: &egui::Context, loaded: Fonts) {
     use egui::epaint::text::{FontTweak, VariationCoords};
-    let mut fonts = egui::FontDefinitions::default();
-    let tektur = egui::FontData::from_static(TEKTUR).tweak(FontTweak {
+    // no egui fonts are compiled in (its default_fonts feature is off): every family is bound here
+    let mut fonts = egui::FontDefinitions::empty();
+    let tektur = egui::FontData::from_owned(loaded.caps).tweak(FontTweak {
         coords: VariationCoords::new([(b"wght", WEIGHT)]),
         ..Default::default()
     });
     fonts.font_data.insert("tektur".into(), Arc::new(tektur));
-    fonts.font_data.insert("noto".into(), Arc::new(egui::FontData::from_static(NOTO)));
-    let chinese = chinese_font();
-    let has_chinese = chinese.is_some();
-    if let Some(bytes) = chinese {
+    fonts.font_data.insert("noto".into(), Arc::new(egui::FontData::from_owned(loaded.body)));
+    let has_chinese = loaded.chinese.is_some();
+    if let Some(bytes) = loaded.chinese {
         fonts.font_data.insert("chinese".into(), Arc::new(egui::FontData::from_owned(bytes)));
     }
-    // each family: its face, then Chinese, then egui's own fonts (symbols)
-    let rest = fonts.families.get(&FontFamily::Proportional).cloned().unwrap_or_default();
-    let chain = |first: &[&str]| -> Vec<String> {
-        first
-            .iter()
-            .map(|s| (*s).to_owned())
-            .chain(has_chinese.then(|| "chinese".to_owned()))
-            .chain(rest.iter().cloned())
-            .collect()
+    // each family: its faces in order, a face missing a glyph handing on to the next (Noto Sans has no arrows; Noto
+    // Sans SC and Tektur have the texts' one); Chinese is left out when there is none
+    let chain = |order: [&str; 3]| -> Vec<String> {
+        order.iter().filter(|f| has_chinese || **f != "chinese").map(|f| (*f).to_owned()).collect()
     };
-    fonts.families.insert(FontFamily::Name(CAPS_FAMILY.into()), chain(&["tektur", "noto"]));
-    fonts.families.insert(FontFamily::Proportional, chain(&["noto"]));
-    if has_chinese {
-        fonts.families.entry(FontFamily::Monospace).or_default().push("chinese".into());
-    }
+    fonts.families.insert(FontFamily::Name(CAPS_FAMILY.into()), chain(["tektur", "noto", "chinese"]));
+    fonts.families.insert(FontFamily::Proportional, chain(["noto", "chinese", "tektur"]));
+    // the window shows no monospace text; the family is bound so that nothing egui draws can miss a font
+    fonts.families.insert(FontFamily::Monospace, chain(["noto", "chinese", "tektur"]));
     ctx.set_fonts(fonts);
 
     let mut style = (*ctx.global_style()).clone();
@@ -446,8 +485,18 @@ mod tests {
     }
 
     #[test]
-    fn the_built_in_fonts_are_fonts() {
-        assert!(TEKTUR.starts_with(&[0, 1, 0, 0]));
-        assert!(NOTO.starts_with(&[0, 1, 0, 0]));
+    fn the_game_fonts_are_found_and_are_fonts() {
+        // in development the game's tree beside this repository holds them (in a download, the game's folder)
+        let fonts = load_fonts_from(&font_dirs()).unwrap();
+        assert!(is_font(&fonts.caps) && is_font(&fonts.body));
+        assert!(fonts.chinese.as_deref().is_some_and(is_font));
+    }
+
+    #[test]
+    fn missing_fonts_are_named() {
+        let empty = std::env::temp_dir().join("drahtseilakt-toolbox-no-fonts-here");
+        let e = load_fonts_from(std::slice::from_ref(&empty)).err().unwrap();
+        assert!(e.contains(CAPS_FILE) && e.contains(&empty.display().to_string()), "{e}");
+        assert!(load_fonts_from(&[]).err().unwrap().contains("nowhere"));
     }
 }

@@ -27,9 +27,12 @@ a texture before and after. Its texts are in English, Russian, German, Simplifie
 language or chosen in the window. The window looks like the game's own menu (a dusk sky, framed dark panels, pill
 buttons with a ball, the game's Tektur lettering), drawn by the toolbox itself: it needs no copy and ships no
 pictures. Its two sections are "Remaster the original levels" and "Import community maps", each with one main
-button; the Real-ESRGAN model and the relief are folded under Advanced. Tektur and Noto Sans (the game's fonts, SIL
-OFL) are built in; Chinese uses the game's Noto Sans SC when the game's `assets/` lie beside the program, else a font
-the system has (Noto CJK, Microsoft YaHei, PingFang...).
+button; the Real-ESRGAN model and the relief are folded under Advanced. No font is built into the
+program: the window reads the game's own font files (Tektur, Noto Sans and, for Chinese, Noto Sans SC; SIL OFL, in the
+game's `assets/fonts/` with their licences) at start, from where the game finds its assets (beside the program, the
+portable folder, the game's tree when built from source), else from a `fonts/` folder beside the toolbox. Without
+Noto Sans SC Chinese uses a font the system has (Noto CJK, Microsoft YaHei, PingFang...); without Tektur or Noto Sans
+the toolbox says which file it missed and where it looked, and opens no window.
 
 `remaster` converts the original levels the copy has into the game's `levels/ballance-remaster/` (the open format), gives
 each level rounder shapes (written into the level beside the original meshes, which the physics keeps using, so runs
@@ -116,4 +119,5 @@ The code and the documentation are written by **Claude** (Anthropic's AI model, 
 leads the project: the idea, the decisions, the plan and the judgement of what is right. The commits carry both
 names.
 
-GPL-3.0-only, as the game.
+GPL-3.0-only, as the game. What it uses of others (the fonts it reads, Real-ESRGAN, the crates) and their licences:
+[THIRD-PARTY.md](THIRD-PARTY.md).

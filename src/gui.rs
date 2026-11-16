@@ -22,6 +22,8 @@ const COLUMN_MARGIN: f32 = 28.0;
 
 /// Opens the window; returns when it is closed.
 pub fn run(data_dir: Option<PathBuf>) -> Result<(), String> {
+    // the fonts first: without them the window could show no text, so a missing one is said here, plainly
+    let fonts = theme::load_fonts()?;
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([760.0, 720.0])
@@ -32,7 +34,7 @@ pub fn run(data_dir: Option<PathBuf>) -> Result<(), String> {
         "drahtseilakt-toolbox",
         options,
         Box::new(move |cc| {
-            theme::apply(&cc.egui_ctx);
+            theme::apply(&cc.egui_ctx, fonts);
             Ok(Box::new(App::new(data_dir)))
         }),
     )
