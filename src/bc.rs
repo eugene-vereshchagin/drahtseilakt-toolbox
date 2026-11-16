@@ -22,10 +22,19 @@ pub fn format_for(rgba: &[u8], fine: bool) -> Format {
 /// The whole mip chain of an RGBA picture as blocks, the largest level first; none when the picture is not whole
 /// blocks (sides multiples of four) or its bytes are not its size.
 pub fn encode(width: u32, height: u32, rgba: &[u8], format: Format) -> Option<Vec<Vec<u8>>> {
-    if width == 0 || height == 0 || !width.is_multiple_of(4) || !height.is_multiple_of(4) || format == Format::Rgba {
+    if width == 0
+        || height == 0
+        || !width.is_multiple_of(4)
+        || !height.is_multiple_of(4)
+        || format == Format::Rgba
+    {
         return None;
     }
-    if rgba.len() != (width as usize).checked_mul(height as usize)?.checked_mul(4)? {
+    if rgba.len()
+        != (width as usize)
+            .checked_mul(height as usize)?
+            .checked_mul(4)?
+    {
         return None;
     }
     let mut levels = Vec::new();
@@ -47,7 +56,10 @@ fn encode_level(w: u32, h: u32, px: &[u8], format: Format) -> Vec<u8> {
     let (bw, bh) = (w.div_ceil(4), h.div_ceil(4));
     let size = format.block_bytes();
     let mut out = vec![0u8; bw * bh * size];
-    let threads = std::thread::available_parallelism().map_or(1, |n| n.get()).min(bh).max(1);
+    let threads = std::thread::available_parallelism()
+        .map_or(1, |n| n.get())
+        .min(bh)
+        .max(1);
     let rows_each = bh.div_ceil(threads);
     std::thread::scope(|s| {
         for (k, part) in out.chunks_mut(rows_each * bw * size).enumerate() {
@@ -59,7 +71,12 @@ fn encode_level(w: u32, h: u32, px: &[u8], format: Format) -> Vec<u8> {
                     for (j, p) in c.iter_mut().enumerate() {
                         let (x, y) = ((bx * 4 + j % 4).min(w - 1), (by * 4 + j / 4).min(h - 1));
                         if let Some(q) = px.get((y * w + x) * 4..(y * w + x) * 4 + 4) {
-                            *p = [f32::from(q[0]), f32::from(q[1]), f32::from(q[2]), f32::from(q[3])];
+                            *p = [
+                                f32::from(q[0]),
+                                f32::from(q[1]),
+                                f32::from(q[2]),
+                                f32::from(q[3]),
+                            ];
                         }
                     }
                     match format {
@@ -251,7 +268,14 @@ fn bc7_block(c: &[[f32; 4]; 16]) -> [u8; 16] {
     }
     // the format's first end is where the indices begin (weight 0)
     let ((mut e0, mut p0), (mut e1, mut p1)) = (to7777(&b), to7777(&a));
-    let ef = |e: &[u8; 4]| [f32::from(e[0]), f32::from(e[1]), f32::from(e[2]), f32::from(e[3])];
+    let ef = |e: &[u8; 4]| {
+        [
+            f32::from(e[0]),
+            f32::from(e[1]),
+            f32::from(e[2]),
+            f32::from(e[3]),
+        ]
+    };
     let along = places(c, &ef(&e1), &ef(&e0), 4);
     let mut index = [0u32; 16];
     for (i, p) in c.iter().enumerate() {
@@ -306,7 +330,11 @@ mod tests {
             for x in 0..side {
                 seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
                 let grain = (seed >> 28) as f32;
-                let edge = if (x / 16 + y / 16) % 2 == 0 { 40.0 } else { 0.0 };
+                let edge = if (x / 16 + y / 16) % 2 == 0 {
+                    40.0
+                } else {
+                    0.0
+                };
                 let (fx, fy) = (x as f32 / side as f32, y as f32 / side as f32);
                 let a = if alpha { (fx * 255.0) as u8 } else { 255 };
                 out.extend_from_slice(&[
@@ -322,14 +350,23 @@ mod tests {
 
     /// The signal-to-noise ratio of what the card draws against the picture, in decibels.
     fn psnr(a: &[u8], b: &[u8]) -> f64 {
-        let mse = a.iter().zip(b).map(|(x, y)| (f64::from(*x) - f64::from(*y)).powi(2)).sum::<f64>() / a.len() as f64;
+        let mse = a
+            .iter()
+            .zip(b)
+            .map(|(x, y)| (f64::from(*x) - f64::from(*y)).powi(2))
+            .sum::<f64>()
+            / a.len() as f64;
         10.0 * (255.0f64 * 255.0 / mse.max(1e-9)).log10()
     }
 
     #[test]
     fn a_picture_survives_both_formats_and_the_game_reads_the_file() {
         // the bounds come from the formats: BC1 keeps 5-6-5 bits and four colours a block, BC7's mode 6 sixteen
-        for (alpha, format, least) in [(false, Format::Bc1, 32.0), (false, Format::Bc7, 40.0), (true, Format::Bc7, 40.0)] {
+        for (alpha, format, least) in [
+            (false, Format::Bc1, 32.0),
+            (false, Format::Bc7, 40.0),
+            (true, Format::Bc7, 40.0),
+        ] {
             let px = picture(64, alpha);
             let levels = encode(64, 64, &px, format).unwrap();
             assert_eq!(levels.len(), 7);
@@ -352,13 +389,19 @@ mod tests {
         for format in [Format::Bc1, Format::Bc7] {
             let l = encode(4, 4, &flat, format).unwrap();
             let back = decode_level(format, 4, 4, &l[0]).unwrap();
-            assert!(flat.iter().zip(&back).all(|(a, b)| a.abs_diff(*b) <= 4), "{format:?} {back:?}");
+            assert!(
+                flat.iter().zip(&back).all(|(a, b)| a.abs_diff(*b) <= 4),
+                "{format:?} {back:?}"
+            );
             let mut two = [0u8, 0, 0, 255].repeat(8);
             two.extend([255u8; 4].repeat(8));
             let l = encode(4, 4, &two, format).unwrap();
             let back = decode_level(format, 4, 4, &l[0]).unwrap();
             let off = u8::from(format == Format::Bc7);
-            assert!(two.iter().zip(&back).all(|(a, b)| a.abs_diff(*b) <= off), "{format:?} {back:?}");
+            assert!(
+                two.iter().zip(&back).all(|(a, b)| a.abs_diff(*b) <= off),
+                "{format:?} {back:?}"
+            );
         }
         // not whole blocks, or bytes that are not the picture's
         assert!(encode(6, 4, &[0; 96], Format::Bc1).is_none());

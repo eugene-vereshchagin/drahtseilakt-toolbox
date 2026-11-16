@@ -59,7 +59,8 @@ impl Unsorted {
 
     fn ready(&mut self) -> Result<(), String> {
         if !self.ready {
-            std::fs::create_dir_all(&self.root).map_err(|e| format!("{}: {e}", self.root.display()))?;
+            std::fs::create_dir_all(&self.root)
+                .map_err(|e| format!("{}: {e}", self.root.display()))?;
             plain_dir(&self.root)?;
             self.ready = true;
         }
@@ -108,12 +109,17 @@ impl Unsorted {
             .ok_or_else(|| format!("{}: no name", dir.display()))?;
         self.ready()?;
         for n in 1..=100u32 {
-            let candidate = if n == 1 { name.clone() } else { format!("{name} ({n})") };
+            let candidate = if n == 1 {
+                name.clone()
+            } else {
+                format!("{name} ({n})")
+            };
             let dst = self.root.join(&candidate);
             if std::fs::symlink_metadata(&dst).is_ok() {
                 continue;
             }
-            std::fs::rename(dir, &dst).map_err(|e| format!("{} -> {}: {e}", dir.display(), dst.display()))?;
+            std::fs::rename(dir, &dst)
+                .map_err(|e| format!("{} -> {}: {e}", dir.display(), dst.display()))?;
             self.items.push((candidate.clone(), reason));
             return Ok(candidate);
         }
@@ -153,7 +159,9 @@ impl Unsorted {
         }
         lines.sort();
         let text = format!("{HEADER}{}\n", lines.join("\n"));
-        let tmp = self.root.join(format!(".README.txt.part-{}", std::process::id()));
+        let tmp = self
+            .root
+            .join(format!(".README.txt.part-{}", std::process::id()));
         let _ = std::fs::remove_file(&tmp);
         write_new(&tmp, text.as_bytes())?;
         std::fs::rename(&tmp, &readme).map_err(|e| {
@@ -187,7 +195,9 @@ fn copy_new(from: &Path, to: &Path) -> Result<(), String> {
         return Err(format!("{}: larger than 4 GiB, not copied", from.display()));
     }
     let src = gamedata::package::open_plain(from, &meta).map_err(|e| fail(from, e))?;
-    let dir = to.parent().ok_or_else(|| format!("{}: no folder", to.display()))?;
+    let dir = to
+        .parent()
+        .ok_or_else(|| format!("{}: no folder", to.display()))?;
     let tmp = dir.join(format!(
         ".part-{}-{}",
         std::process::id(),
@@ -223,7 +233,8 @@ fn write_new(path: &Path, bytes: &[u8]) -> Result<(), String> {
         .create_new(true)
         .open(path)
         .map_err(|e| format!("{}: {e}", path.display()))?;
-    f.write_all(bytes).map_err(|e| format!("{}: {e}", path.display()))
+    f.write_all(bytes)
+        .map_err(|e| format!("{}: {e}", path.display()))
 }
 
 /// A path for README.txt: control and format characters escaped, so a line stays one line.
@@ -237,7 +248,8 @@ mod tests {
     use super::*;
 
     fn temp(name: &str) -> PathBuf {
-        let d = std::env::temp_dir().join(format!("toolbox-unsorted-{name}-{}", std::process::id()));
+        let d =
+            std::env::temp_dir().join(format!("toolbox-unsorted-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d
@@ -256,21 +268,35 @@ mod tests {
         // nothing set aside: nothing made
         u.finish().unwrap();
         assert!(!root.exists());
-        u.copy(&src, &src.join("a/b/pack.zip"), Reason::Archive).unwrap();
+        u.copy(&src, &src.join("a/b/pack.zip"), Reason::Archive)
+            .unwrap();
         assert_eq!(std::fs::read(root.join("a/b/pack.zip")).unwrap(), b"zip");
         assert!(src.join("a/b/pack.zip").exists(), "the source is only read");
-        assert_eq!(u.move_dir(&base.join("Lvl"), Reason::Uncatalogued).unwrap(), "Lvl");
+        assert_eq!(
+            u.move_dir(&base.join("Lvl"), Reason::Uncatalogued).unwrap(),
+            "Lvl"
+        );
         assert!(!base.join("Lvl").exists() && root.join("Lvl/x.nmo").exists());
         u.finish().unwrap();
         let readme = std::fs::read_to_string(root.join("README.txt")).unwrap();
-        assert!(readme.contains("- a/b/pack.zip  —  packed archive"), "{readme}");
-        assert!(readme.contains("- Lvl  —  not in the catalogue"), "{readme}");
+        assert!(
+            readme.contains("- a/b/pack.zip  —  packed archive"),
+            "{readme}"
+        );
+        assert!(
+            readme.contains("- Lvl  —  not in the catalogue"),
+            "{readme}"
+        );
         // a second run keeps the earlier items, numbers a second folder of one name, never overwrites
         std::fs::create_dir_all(base.join("Lvl")).unwrap();
         std::fs::write(src.join("a/b/pack.zip"), b"changed").unwrap();
         let mut u = Unsorted::new(&root);
-        assert_eq!(u.move_dir(&base.join("Lvl"), Reason::NotOneLevel).unwrap(), "Lvl (2)");
-        u.copy(&src, &src.join("a/b/pack.zip"), Reason::Archive).unwrap();
+        assert_eq!(
+            u.move_dir(&base.join("Lvl"), Reason::NotOneLevel).unwrap(),
+            "Lvl (2)"
+        );
+        u.copy(&src, &src.join("a/b/pack.zip"), Reason::Archive)
+            .unwrap();
         assert_eq!(std::fs::read(root.join("a/b/pack.zip")).unwrap(), b"zip");
         u.finish().unwrap();
         let readme = std::fs::read_to_string(root.join("README.txt")).unwrap();

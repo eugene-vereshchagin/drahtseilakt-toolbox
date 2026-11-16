@@ -77,11 +77,28 @@ impl T {
 
 macro_rules! text {
     ($name:ident, $en:expr, $ru:expr, $de:expr, $zh:expr, $fr:expr, $es:expr, $it:expr) => {
-        pub const $name: T = T { en: $en, ru: $ru, de: $de, zh: $zh, fr: $fr, es: $es, it: $it };
+        pub const $name: T = T {
+            en: $en,
+            ru: $ru,
+            de: $de,
+            zh: $zh,
+            fr: $fr,
+            es: $es,
+            it: $it,
+        };
     };
 }
 
-text!(TITLE, "Drahtseilakt toolbox", "Drahtseilakt: подготовка уровней", "Drahtseilakt-Toolbox", "Drahtseilakt 工具箱", "Boîte à outils Drahtseilakt", "Caja de herramientas de Drahtseilakt", "Toolbox di Drahtseilakt");
+text!(
+    TITLE,
+    "Drahtseilakt toolbox",
+    "Drahtseilakt: подготовка уровней",
+    "Drahtseilakt-Toolbox",
+    "Drahtseilakt 工具箱",
+    "Boîte à outils Drahtseilakt",
+    "Caja de herramientas de Drahtseilakt",
+    "Toolbox di Drahtseilakt"
+);
 text!(
     INTRO,
     "Makes remastered levels from your own copy of Ballance: rounder shapes and larger textures.",
@@ -102,10 +119,39 @@ text!(
     "Remasterizar los niveles originales",
     "Rimasterizza i livelli originali"
 );
-text!(MAPS_TITLE, "Import community maps", "Импорт любительских карт", "Community-Karten importieren", "导入自制地图", "Importer des cartes de la communauté", "Importar mapas de la comunidad", "Importa mappe della comunità");
-text!(ADVANCED, "Advanced", "Дополнительно", "Erweitert", "高级", "Avancé", "Avanzado", "Avanzate");
-text!(LANGUAGE, "Language", "Язык", "Sprache", "语言", "Langue", "Idioma", "Lingua");
-text!(COPY, "Your copy of the game", "Ваша копия игры", "Deine Kopie des Spiels", "你的游戏拷贝", "Votre copie du jeu", "Tu copia del juego", "La tua copia del gioco");
+text!(
+    MAPS_TITLE,
+    "Import community maps",
+    "Импорт любительских карт",
+    "Community-Karten importieren",
+    "导入自制地图",
+    "Importer des cartes de la communauté",
+    "Importar mapas de la comunidad",
+    "Importa mappe della comunità"
+);
+text!(
+    ADVANCED,
+    "Advanced",
+    "Дополнительно",
+    "Erweitert",
+    "高级",
+    "Avancé",
+    "Avanzado",
+    "Avanzate"
+);
+text!(
+    LANGUAGE, "Language", "Язык", "Sprache", "语言", "Langue", "Idioma", "Lingua"
+);
+text!(
+    COPY,
+    "Your copy of the game",
+    "Ваша копия игры",
+    "Deine Kopie des Spiels",
+    "你的游戏拷贝",
+    "Votre copie du jeu",
+    "Tu copia del juego",
+    "La tua copia del gioco"
+);
 text!(
     NO_COPY,
     "Not found: give the Ballance folder (or import it with the game first).",
@@ -116,15 +162,96 @@ text!(
     "No encontrada: indica la carpeta de Ballance (o impórtala antes con el juego).",
     "Non trovata: indica la cartella di Ballance (o importala prima con il gioco)."
 );
-text!(BROWSE, "Folder…", "Папка…", "Ordner…", "文件夹…", "Dossier…", "Carpeta…", "Cartella…");
-text!(IMAGE, "Disc image…", "Образ диска…", "CD-Abbild…", "光盘镜像…", "Image disque…", "Imagen de disco…", "Immagine disco…");
-text!(PICK_COPY, "Choose the game's folder", "Выберите папку с игрой", "Spielordner wählen", "选择游戏文件夹", "Choisir le dossier du jeu", "Elige la carpeta del juego", "Scegli la cartella del gioco");
-text!(PICK_IMAGE, "Choose the CD image (.cue, .bin, .iso)", "Выберите образ диска (.cue, .bin, .iso)", "CD-Abbild wählen (.cue, .bin, .iso)", "选择光盘镜像（.cue、.bin、.iso）", "Choisir l'image du CD (.cue, .bin, .iso)", "Elige la imagen del CD (.cue, .bin, .iso)", "Scegli l'immagine del CD (.cue, .bin, .iso)");
-text!(PICK_MAPS, "Choose the folder of downloaded maps", "Выберите папку со скачанными картами", "Ordner mit heruntergeladenen Karten wählen", "选择已下载地图的文件夹", "Choisir le dossier des cartes téléchargées", "Elige la carpeta de los mapas descargados", "Scegli la cartella delle mappe scaricate");
-text!(USE, "Use", "Выбрать", "Übernehmen", "使用", "Utiliser", "Usar", "Usa");
-text!(OUTPUT, "Levels are made into", "Уровни будут в папке", "Die Level entstehen in", "关卡将生成到", "Les niveaux sont créés dans", "Los niveles se crean en", "I livelli vengono creati in");
-text!(SCALE, "Textures larger by", "Увеличить текстуры в", "Texturen größer um", "纹理放大倍数", "Textures agrandies de", "Texturas más grandes en", "Texture ingrandite di");
-text!(MODEL, "Upscaler", "Чем увеличивать", "Vergrößern mit", "放大方式", "Agrandir avec", "Ampliar con", "Ingrandisci con");
+text!(
+    BROWSE,
+    "Folder…",
+    "Папка…",
+    "Ordner…",
+    "文件夹…",
+    "Dossier…",
+    "Carpeta…",
+    "Cartella…"
+);
+text!(
+    IMAGE,
+    "Disc image…",
+    "Образ диска…",
+    "CD-Abbild…",
+    "光盘镜像…",
+    "Image disque…",
+    "Imagen de disco…",
+    "Immagine disco…"
+);
+text!(
+    PICK_COPY,
+    "Choose the game's folder",
+    "Выберите папку с игрой",
+    "Spielordner wählen",
+    "选择游戏文件夹",
+    "Choisir le dossier du jeu",
+    "Elige la carpeta del juego",
+    "Scegli la cartella del gioco"
+);
+text!(
+    PICK_IMAGE,
+    "Choose the CD image (.cue, .bin, .iso)",
+    "Выберите образ диска (.cue, .bin, .iso)",
+    "CD-Abbild wählen (.cue, .bin, .iso)",
+    "选择光盘镜像（.cue、.bin、.iso）",
+    "Choisir l'image du CD (.cue, .bin, .iso)",
+    "Elige la imagen del CD (.cue, .bin, .iso)",
+    "Scegli l'immagine del CD (.cue, .bin, .iso)"
+);
+text!(
+    PICK_MAPS,
+    "Choose the folder of downloaded maps",
+    "Выберите папку со скачанными картами",
+    "Ordner mit heruntergeladenen Karten wählen",
+    "选择已下载地图的文件夹",
+    "Choisir le dossier des cartes téléchargées",
+    "Elige la carpeta de los mapas descargados",
+    "Scegli la cartella delle mappe scaricate"
+);
+text!(
+    USE,
+    "Use",
+    "Выбрать",
+    "Übernehmen",
+    "使用",
+    "Utiliser",
+    "Usar",
+    "Usa"
+);
+text!(
+    OUTPUT,
+    "Levels are made into",
+    "Уровни будут в папке",
+    "Die Level entstehen in",
+    "关卡将生成到",
+    "Les niveaux sont créés dans",
+    "Los niveles se crean en",
+    "I livelli vengono creati in"
+);
+text!(
+    SCALE,
+    "Textures larger by",
+    "Увеличить текстуры в",
+    "Texturen größer um",
+    "纹理放大倍数",
+    "Textures agrandies de",
+    "Texturas más grandes en",
+    "Texture ingrandite di"
+);
+text!(
+    MODEL,
+    "Upscaler",
+    "Чем увеличивать",
+    "Vergrößern mit",
+    "放大方式",
+    "Agrandir avec",
+    "Ampliar con",
+    "Ingrandisci con"
+);
 text!(
     LANCZOS,
     "Lanczos (Real-ESRGAN not found: larger, no new detail)",
@@ -135,7 +262,16 @@ text!(
     "Lanczos (Real-ESRGAN no encontrado: más grande, sin detalles nuevos)",
     "Lanczos (Real-ESRGAN non trovato: più grande, senza nuovi dettagli)"
 );
-text!(RELIEF, "Relief strength", "Сила рельефа", "Reliefstärke", "浮雕强度", "Force du relief", "Intensidad del relieve", "Intensità del rilievo");
+text!(
+    RELIEF,
+    "Relief strength",
+    "Сила рельефа",
+    "Reliefstärke",
+    "浮雕强度",
+    "Force du relief",
+    "Intensidad del relieve",
+    "Intensità del rilievo"
+);
 text!(
     RELIEF_WARN,
     "Guessed from the picture, relief deepens every crack and gap. 0 is off; keep it at 1–3.",
@@ -146,14 +282,86 @@ text!(
     "Se adivina a partir de la imagen y profundiza cada grieta y cada junta. 0 es desactivado; mantenlo entre 1 y 3.",
     "Dedotto dall'immagine, il rilievo approfondisce ogni crepa e ogni fessura. 0 è disattivato; resta tra 1 e 3."
 );
-text!(MAKE, "Make", "Сделать", "Erstellen", "开始制作", "Créer", "Crear", "Crea");
-text!(CANCEL, "Cancel", "Отменить", "Abbrechen", "取消", "Annuler", "Cancelar", "Annulla");
-text!(CANCELLING, "Stopping after this texture…", "Останавливаюсь после текущей текстуры…", "Halte nach dieser Textur an…", "将在当前纹理后停止…", "Arrêt après cette texture…", "Se detendrá tras esta textura…", "Mi fermo dopo questa texture…");
-text!(WORKING, "Working on", "Сейчас", "In Arbeit", "正在处理", "En cours", "En curso", "In corso");
-text!(DONE, "Done.", "Готово.", "Fertig.", "完成。", "Terminé.", "Hecho.", "Fatto.");
-text!(FAILED, "Failed:", "Ошибка:", "Fehler:", "失败：", "Échec :", "Error:", "Errore:");
-text!(RESULT, "Result", "Результат", "Ergebnis", "结果", "Résultat", "Resultado", "Risultato");
-text!(PREVIEW, "Last texture: before and after", "Последняя текстура: до и после", "Letzte Textur: vorher und nachher", "最近的纹理：处理前后", "Dernière texture : avant et après", "Última textura: antes y después", "Ultima texture: prima e dopo");
+text!(
+    MAKE,
+    "Make",
+    "Сделать",
+    "Erstellen",
+    "开始制作",
+    "Créer",
+    "Crear",
+    "Crea"
+);
+text!(
+    CANCEL,
+    "Cancel",
+    "Отменить",
+    "Abbrechen",
+    "取消",
+    "Annuler",
+    "Cancelar",
+    "Annulla"
+);
+text!(
+    CANCELLING,
+    "Stopping after this texture…",
+    "Останавливаюсь после текущей текстуры…",
+    "Halte nach dieser Textur an…",
+    "将在当前纹理后停止…",
+    "Arrêt après cette texture…",
+    "Se detendrá tras esta textura…",
+    "Mi fermo dopo questa texture…"
+);
+text!(
+    WORKING,
+    "Working on",
+    "Сейчас",
+    "In Arbeit",
+    "正在处理",
+    "En cours",
+    "En curso",
+    "In corso"
+);
+text!(
+    DONE,
+    "Done.",
+    "Готово.",
+    "Fertig.",
+    "完成。",
+    "Terminé.",
+    "Hecho.",
+    "Fatto."
+);
+text!(
+    FAILED,
+    "Failed:",
+    "Ошибка:",
+    "Fehler:",
+    "失败：",
+    "Échec :",
+    "Error:",
+    "Errore:"
+);
+text!(
+    RESULT,
+    "Result",
+    "Результат",
+    "Ergebnis",
+    "结果",
+    "Résultat",
+    "Resultado",
+    "Risultato"
+);
+text!(
+    PREVIEW,
+    "Last texture: before and after",
+    "Последняя текстура: до и после",
+    "Letzte Textur: vorher und nachher",
+    "最近的纹理：处理前后",
+    "Dernière texture : avant et après",
+    "Última textura: antes y después",
+    "Ultima texture: prima e dopo"
+);
 text!(
     PLAY,
     "Play them in the game: Start → Remastered (extended mode).",
@@ -174,7 +382,16 @@ text!(
     "Mapas de la comunidad: una descarga descomprimida, ordenada en levels/user-levels, una carpeta por nivel",
     "Mappe della comunità: un download decompresso, ordinato in levels/user-levels, una cartella per livello"
 );
-text!(IMPORT, "Import", "Импортировать", "Importieren", "导入", "Importer", "Importar", "Importa");
+text!(
+    IMPORT,
+    "Import",
+    "Импортировать",
+    "Importieren",
+    "导入",
+    "Importer",
+    "Importar",
+    "Importa"
+);
 text!(
     PLAY_MAPS,
     "Play them in the game: Start → Community maps (extended mode).",

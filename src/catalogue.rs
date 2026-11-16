@@ -43,11 +43,18 @@ pub struct Catalogue {
 
 /// Reads the catalogue file (a plain file of at most FILE_MAX, never through a link).
 pub fn read(path: &std::path::Path) -> Result<Catalogue, String> {
-    let bytes = gamedata::package::read_small(path, FILE_MAX)
-        .ok_or_else(|| format!("{}: not a plain readable file of at most 4 MiB", path.display()))?;
+    let bytes = gamedata::package::read_small(path, FILE_MAX).ok_or_else(|| {
+        format!(
+            "{}: not a plain readable file of at most 4 MiB",
+            path.display()
+        )
+    })?;
     let c = parse(&String::from_utf8_lossy(&bytes));
     if c.entries.is_empty() {
-        return Err(format!("{}: no maps found (not the catalogue's table)", path.display()));
+        return Err(format!(
+            "{}: no maps found (not the catalogue's table)",
+            path.display()
+        ));
     }
     Ok(c)
 }
@@ -143,7 +150,11 @@ fn cells(line: &str) -> Option<Vec<String>> {
 
 /// The columns of Original Name, English Name, Author and Difficulty, if `cells` is the header row.
 fn header(cells: &[String]) -> Option<[usize; 4]> {
-    let at = |want: &str| cells.iter().position(|c| c.trim().eq_ignore_ascii_case(want));
+    let at = |want: &str| {
+        cells
+            .iter()
+            .position(|c| c.trim().eq_ignore_ascii_case(want))
+    };
     Some([
         at("Original Name")?,
         at("English Name")?,
@@ -154,7 +165,10 @@ fn header(cells: &[String]) -> Option<[usize; 4]> {
 
 /// A name cell's versions ("A | B"), line breaks (`<br>`) as spaces, each cleaned, empty ones dropped.
 fn versions(cell: &str) -> Vec<String> {
-    let cell = cell.replace("<br />", " ").replace("<br/>", " ").replace("<br>", " ");
+    let cell = cell
+        .replace("<br />", " ")
+        .replace("<br/>", " ")
+        .replace("<br>", " ");
     cell.split('|')
         .map(|v| clean(v, CELL_MAX))
         .filter(|v| !v.is_empty())
@@ -214,7 +228,10 @@ impl Catalogue {
     /// (normalised: case, punctuation, spaces, full-width forms, "v1.0"/"V1.0"/"1.0"), else the first that matches
     /// without its version number; a name matching several maps matches none.
     pub fn find(&self, names: &[&str]) -> Option<Found<'_>> {
-        for (index, k) in [(&self.exact, key as fn(&str) -> String), (&self.loose, loose_key)] {
+        for (index, k) in [
+            (&self.exact, key as fn(&str) -> String),
+            (&self.loose, loose_key),
+        ] {
             for name in names {
                 let k = k(name);
                 // a very short name ("Go", "A", "7") says too little to be matched
@@ -260,7 +277,10 @@ impl Found<'_> {
     /// The original title when it is another one and holds Chinese (or Japanese, Korean) characters.
     pub fn title_zh(&self) -> Option<&str> {
         let e = self.entry;
-        let o = e.original.get(self.version).or_else(|| e.original.first())?;
+        let o = e
+            .original
+            .get(self.version)
+            .or_else(|| e.original.first())?;
         (o != self.title() && o.chars().any(is_cjk)).then_some(o.as_str())
     }
 
@@ -272,7 +292,9 @@ impl Found<'_> {
         if !title.is_empty() {
             out.push(format!("title = {title}"));
         }
-        if let Some(zh) = self.title_zh().map(|z| clean(z, gamedata::package::TITLE_MAX))
+        if let Some(zh) = self
+            .title_zh()
+            .map(|z| clean(z, gamedata::package::TITLE_MAX))
             && !zh.is_empty()
         {
             out.push(format!("title.zh = {zh}"));
@@ -305,9 +327,17 @@ fn fold(c: char) -> char {
 /// A name as matched: full-width folded, lower case, only letters, digits and `+` (so "Level++ 3" and "Level+++3"
 /// stay apart), a `v` before a version number dropped ("V1.0", "v1.0" and "1.0" alike), a BML ".Level" end dropped.
 pub fn key(name: &str) -> String {
-    let lower: Vec<char> = name.chars().map(fold).flat_map(char::to_lowercase).collect();
+    let lower: Vec<char> = name
+        .chars()
+        .map(fold)
+        .flat_map(char::to_lowercase)
+        .collect();
     let lower: &[char] = match lower.len().checked_sub(6) {
-        Some(at) if lower.get(at..).is_some_and(|t| t.iter().copied().eq(".level".chars())) => {
+        Some(at)
+            if lower
+                .get(at..)
+                .is_some_and(|t| t.iter().copied().eq(".level".chars())) =>
+        {
             lower.get(..at).unwrap_or(&lower)
         }
         _ => &lower,
@@ -319,7 +349,10 @@ pub fn key(name: &str) -> String {
         }
         let before = i.checked_sub(1).and_then(|p| lower.get(p));
         let after = lower.get(i.saturating_add(1));
-        if c == 'v' && after.is_some_and(char::is_ascii_digit) && !before.is_some_and(char::is_ascii_alphabetic) {
+        if c == 'v'
+            && after.is_some_and(char::is_ascii_digit)
+            && !before.is_some_and(char::is_ascii_alphabetic)
+        {
             continue;
         }
         out.push(c);
@@ -438,14 +471,26 @@ mod tests {
         let title = |n: &str| c.find(&[n]).map(|f| f.title().to_owned());
         assert_eq!(title("Pie in the Sky").as_deref(), Some("Pie in the Sky"));
         assert_eq!(title("pie_in-the  SKY").as_deref(), Some("Pie in the Sky"));
-        assert_eq!(title("ＰＩＥ　ｉｎ the Sky").as_deref(), Some("Pie in the Sky"));
+        assert_eq!(
+            title("ＰＩＥ　ｉｎ the Sky").as_deref(),
+            Some("Pie in the Sky")
+        );
         assert_eq!(title("天马行空").as_deref(), Some("Pie in the Sky"));
         assert_eq!(title("天马行空.Level").as_deref(), Some("Pie in the Sky"));
-        assert_eq!(title("Challenge 250 V1.0").as_deref(), Some("Challenge 250 v1.0"));
-        assert_eq!(title("Challenge 250 1.0").as_deref(), Some("Challenge 250 v1.0"));
+        assert_eq!(
+            title("Challenge 250 V1.0").as_deref(),
+            Some("Challenge 250 v1.0")
+        );
+        assert_eq!(
+            title("Challenge 250 1.0").as_deref(),
+            Some("Challenge 250 v1.0")
+        );
         assert_eq!(title("挑战250v1.0").as_deref(), Some("Challenge 250 v1.0"));
         // a version number the catalogue lacks
-        assert_eq!(title("Bright Galaxy v1.2").as_deref(), Some("Bright Galaxy"));
+        assert_eq!(
+            title("Bright Galaxy v1.2").as_deref(),
+            Some("Bright Galaxy")
+        );
         // a number that is part of the name is no version
         assert_eq!(title("Level++ 9").as_deref(), Some("Level++ 9"));
         assert_eq!(title("Level+++3").as_deref(), Some("Level+++3"));
@@ -453,7 +498,10 @@ mod tests {
         assert_eq!(title("Level++ 5"), None);
         // another version than the catalogue's is no match; a very short name matches nothing
         assert_eq!(title("Challenge 250 v3.0"), None);
-        assert_eq!(title("Pie in the Sky v2"), Some("Pie in the Sky".to_owned()));
+        assert_eq!(
+            title("Pie in the Sky v2"),
+            Some("Pie in the Sky".to_owned())
+        );
         // the versions of one cell, and a file named after the whole cell
         let f = c.find(&["急速下坠V1.0"]).unwrap();
         assert_eq!(
@@ -506,7 +554,10 @@ mod tests {
         assert!(parse("\u{0}\u{ffff}|||||\\").entries.is_empty());
         // short rows, overlong cells, too many cells, rows of bars: skipped
         let head = "| Original Name | English Name | Author | Difficulty |\n";
-        let long = format!("{head}| {} | B | c | 1 |\n| x |\n| A | B | c | 1 |\n", "x".repeat(5000));
+        let long = format!(
+            "{head}| {} | B | c | 1 |\n| x |\n| A | B | c | 1 |\n",
+            "x".repeat(5000)
+        );
         let c = parse(&long);
         assert_eq!((c.entries.len(), c.skipped), (1, 2));
         let wide = format!("{head}|{}\n", " a |".repeat(100));
@@ -518,7 +569,10 @@ mod tests {
             " \\| x".repeat(50)
         ));
         let e = &c.entries[0];
-        assert_eq!((e.original[0].as_str(), e.english[0].as_str()), ("A[2J", "B C"));
+        assert_eq!(
+            (e.original[0].as_str(), e.english[0].as_str()),
+            ("A[2J", "B C")
+        );
         assert!(e.author.chars().count() <= gamedata::package::FIELD_MAX);
         assert!(!e.author.contains('\u{7}'));
         // escaped backslash at the end, a lone escape
@@ -534,7 +588,12 @@ mod tests {
             "T".repeat(300)
         ));
         for e in &c.entries {
-            for l in (Found { entry: e, version: 0 }).lines() {
+            for l in (Found {
+                entry: e,
+                version: 0,
+            })
+            .lines()
+            {
                 assert!(!l.contains('\n') && l.chars().count() <= 60, "{l}");
             }
         }
