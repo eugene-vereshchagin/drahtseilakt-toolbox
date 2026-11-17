@@ -65,6 +65,10 @@ jobs:
             exit 1
           fi
           if [ "$REF_TYPE" = tag ]; then version=$REF_NAME; else version="git-${SHA:0:7}"; fi
+          # a ref name only (no '..', no query): it goes into an API path with the game token
+          if ! [[ "$GAME_REF" =~ ^[A-Za-z0-9._/-]+$ ]] || [[ "$GAME_REF" == *..* ]]; then
+            echo "::error::game_ref is not a branch, tag or commit name"; exit 1
+          fi
           game_sha=$(gh api "repos/$GAME_REPO/commits/$GAME_REF" --jq .sha)
           [[ "$game_sha" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::cannot resolve $GAME_REF in $GAME_REPO"; exit 1; }
           echo "game $GAME_REF = $game_sha"

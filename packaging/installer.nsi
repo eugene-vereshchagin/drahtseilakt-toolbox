@@ -14,6 +14,12 @@ InstallDir "$PROGRAMFILES64\Drahtseilakt toolbox"
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_LANGUAGE "English"
 
+; the command line's /D= sets INSTDIR before this runs: put the fixed folder back, so the uninstaller's RMDir /r can
+; never be pointed at a folder that holds other files
+Function .onInit
+  StrCpy $INSTDIR "$PROGRAMFILES64\Drahtseilakt toolbox"
+FunctionEnd
+
 Section "Install"
   SetRegView 64
   SetOutPath "$INSTDIR"
