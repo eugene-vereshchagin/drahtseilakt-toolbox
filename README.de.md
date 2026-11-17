@@ -108,6 +108,26 @@ hat (ein eigenes `author =`), bleiben.
 
 Die Toolbox geht nie online und fasst die Originalkopie des Spielers nie an.
 
+## Downloads und Release-Builds
+
+Releases baut GitHub Actions (`.github/workflows/toolbox-release.yml`, von Hand oder durch ein Tag `X.Y.Z` gestartet;
+das Tag erzeugt ein Release als Entwurf mit allen Paketen und `SHA256SUMS`):
+
+| System | Pakete |
+|---|---|
+| Windows x86_64, arm64 | Installer (`-setup.exe`), portables `.zip` |
+| Linux x86_64, aarch64 | portables `.tar.gz`, `.deb`, `.rpm` |
+| macOS arm64, x86_64 | portables `.tar.gz` (nicht signiert: siehe `README.txt` darin) |
+| FreeBSD x86_64 | `.tar.gz` (experimentell) |
+
+Jedes Paket enthaelt die OFL-Schriften des Spiels in `fonts/` neben dem Programm (das Fenster liest sie von dort);
+kein Paket haengt also vom Paket des Spiels ab. Real-ESRGAN (festgelegte Version, SHA-256 geprueft, `third-party.txt`)
+liegt bei Linux x86_64, Windows x86_64 und macOS bei; bei den anderen Systemen sagt die `README.txt` des Pakets, dass es
+fehlt, und die Toolbox vergroessert Texturen dann mit Lanczos. `.deb` und `.rpm` legen Programm, Schriften und
+Real-ESRGAN nach `/usr/lib/drahtseilakt-toolbox/` mit einem Link in `/usr/bin`. Der Build braucht das Secret
+`GAME_TOKEN` (Lesezugriff auf das private Repository des Spiels, dessen Crates verwendet werden).
+`scripts/ci-package.sh OS ARCH BINARY VERSION` erzeugt die Pakete aus einer gebauten Binaerdatei.
+
 ## Bauen
 
 Das Lesen der Level teilt die Toolbox mit dem Spiel: Sie braucht einen Klon des Spiel-Repositorys daneben, unter

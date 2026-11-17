@@ -35,6 +35,19 @@ drahtseilakt-toolbox import-maps --refresh DIR --catalogue FILE [--source DIR] [
 
 toolbox 从不联网，也从不改动玩家的原版拷贝。
 
+## 下载与发布构建
+
+发布版本由 GitHub Actions 构建(`.github/workflows/toolbox-release.yml`,手动启动或由标签 `X.Y.Z` 触发;标签会创建包含全部安装包和 `SHA256SUMS` 的草稿发布):
+
+| 系统 | 安装包 |
+|---|---|
+| Windows x86_64、arm64 | 安装程序(`-setup.exe`)、便携版 `.zip` |
+| Linux x86_64、aarch64 | 便携版 `.tar.gz`、`.deb`、`.rpm` |
+| macOS arm64、x86_64 | 便携版 `.tar.gz`(未签名:见包内 `README.txt`) |
+| FreeBSD x86_64 | `.tar.gz`(实验性) |
+
+每个包都在程序旁的 `fonts/` 中带有游戏的 OFL 字体(窗口从那里读取),因此没有任何包依赖游戏的包。Real-ESRGAN(固定版本,校验 SHA-256,见 `third-party.txt`)随 Linux x86_64、Windows x86_64 和 macOS 的包提供;其他系统的包中 `README.txt` 会说明它缺失,此时工具箱改用 Lanczos 放大纹理。`.deb` 和 `.rpm` 把程序、字体和 Real-ESRGAN 放在 `/usr/lib/drahtseilakt-toolbox/`,并在 `/usr/bin` 放一个链接。构建需要密钥 `GAME_TOKEN`(对游戏私有仓库的只读权限,工具箱使用其 crate)。`scripts/ci-package.sh OS ARCH BINARY VERSION` 可由已构建的程序生成安装包。
+
 ## 构建
 
 toolbox 与游戏共用关卡读取代码：需要在旁边的 `../drahtseilakt` 放一份游戏仓库的克隆。然后执行 `cargo build --release --offline`。若要使用 Real-ESRGAN，把固定版本的下载包解压到 `third_party/realesrgan/`，并把 `target/release/realesrgan` 链接到该目录。

@@ -107,6 +107,26 @@ for (an `author =` of your own) are kept.
 
 The toolbox never goes online and never touches the player's original copy.
 
+## Downloads and release builds
+
+Releases are built by GitHub Actions (`.github/workflows/toolbox-release.yml`, started by hand or by a tag `X.Y.Z`; the
+tag makes a draft release with every package and `SHA256SUMS`):
+
+| System | Packages |
+|---|---|
+| Windows x86_64, arm64 | installer (`-setup.exe`), portable `.zip` |
+| Linux x86_64, aarch64 | portable `.tar.gz`, `.deb`, `.rpm` |
+| macOS arm64, x86_64 | portable `.tar.gz` (not signed: see the `README.txt` inside) |
+| FreeBSD x86_64 | `.tar.gz` (experimental) |
+
+Every package carries the game's OFL fonts in `fonts/` beside the program (the window reads them from there), so no
+package depends on the game's. Real-ESRGAN (pinned and checked against its SHA-256, `third-party.txt`) is bundled on
+Linux x86_64, Windows x86_64 and macOS; on the other systems the package's `README.txt` says it is missing, and the
+toolbox then enlarges textures with Lanczos. The `.deb` and `.rpm` keep the program, its fonts and Real-ESRGAN in
+`/usr/lib/drahtseilakt-toolbox/` with a link in `/usr/bin`. The build needs the secret `GAME_TOKEN` (read access to the
+game's private repository, whose crates it builds on). `scripts/ci-package.sh OS ARCH BINARY VERSION` makes the
+packages from a built binary.
+
 ## Building
 
 The toolbox shares the level reading with the game: it needs a checkout of the game's repository beside this one,
