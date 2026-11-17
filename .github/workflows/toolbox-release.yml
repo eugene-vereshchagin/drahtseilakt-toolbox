@@ -9,8 +9,9 @@
 #   SHA256SUMS; nothing is public until the owner publishes the draft.
 #
 #   The toolbox builds on the game's crates by path (../drahtseilakt), so the game's repository is checked out beside it.
-#   Secret GAME_TOKEN: a fine-grained token with read-only Contents on eugene-vereshchagin/drahtseilakt (a private
-#   repository; the workflow's own token cannot read another repository). The job fails early if it is missing.
+#   Secret GAME_DEPLOY_KEY: the private half of an SSH deploy key that is registered READ-ONLY on
+#   eugene-vereshchagin/drahtseilakt (a private repository; the workflow's own token cannot read another repository).
+#   A deploy key reads that one repository and nothing else. The job fails early if it is missing.
 #   Input game_ref (default main): the game's branch, tag or commit; resolved to one commit in the plan job, so every
 #   job builds the same pair.
 #
@@ -51,27 +52,38 @@ jobs:
       version: ${{ steps.p.outputs.version }}
       game_sha: ${{ steps.p.outputs.game_sha }}
     steps:
-      - id: p
+      - name: secret present
         env:
-          GH_TOKEN: ${{ secrets.GAME_TOKEN }}
-          REF_TYPE: ${{ github.ref_type }}
-          REF_NAME: ${{ github.ref_name }}
-          SHA: ${{ github.sha }}
+          KEY: ${{ secrets.GAME_DEPLOY_KEY }}
           GAME_REF: ${{ inputs.game_ref || 'main' }}
         run: |
           set -euo pipefail
-          if [ -z "$GH_TOKEN" ]; then
-            echo "::error::The secret GAME_TOKEN is not set (a fine-grained token, read-only Contents on $GAME_REPO)."
+          if [ -z "$KEY" ]; then
+            echo "::error::The secret GAME_DEPLOY_KEY is not set (an SSH deploy key, read-only on $GAME_REPO)."
             exit 1
           fi
-          if [ "$REF_TYPE" = tag ]; then version=$REF_NAME; else version="git-${SHA:0:7}"; fi
-          # a ref name only (no '..', no query): it goes into an API path with the game token
+          # a ref name only (no '..'): checked before it reaches checkout
           if ! [[ "$GAME_REF" =~ ^[A-Za-z0-9._/-]+$ ]] || [[ "$GAME_REF" == *..* ]]; then
             echo "::error::game_ref is not a branch, tag or commit name"; exit 1
           fi
-          game_sha=$(gh api "repos/$GAME_REPO/commits/$GAME_REF" --jq .sha)
-          [[ "$game_sha" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::cannot resolve $GAME_REF in $GAME_REPO"; exit 1; }
-          echo "game $GAME_REF = $game_sha"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ env.GAME_REPO }}
+          ref: ${{ inputs.game_ref || 'main' }}
+          ssh-key: ${{ secrets.GAME_DEPLOY_KEY }}
+          path: drahtseilakt
+          persist-credentials: false
+      - id: p
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$REF_TYPE" = tag ]; then version=$REF_NAME; else version="git-${SHA:0:7}"; fi
+          game_sha=$(git -C drahtseilakt rev-parse HEAD)
+          [[ "$game_sha" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::cannot resolve the game's commit"; exit 1; }
+          echo "game = $game_sha"
           { echo "version=$version"; echo "game_sha=$game_sha"; } >>"$GITHUB_OUTPUT"
 
   build:
@@ -104,7 +116,7 @@ jobs:
         with:
           repository: ${{ env.GAME_REPO }}
           ref: ${{ needs.plan.outputs.game_sha }}
-          token: ${{ secrets.GAME_TOKEN }}
+          ssh-key: ${{ secrets.GAME_DEPLOY_KEY }}
           path: drahtseilakt
           persist-credentials: false
       - name: toolchain
@@ -148,7 +160,7 @@ jobs:
         with:
           repository: ${{ env.GAME_REPO }}
           ref: ${{ needs.plan.outputs.game_sha }}
-          token: ${{ secrets.GAME_TOKEN }}
+          ssh-key: ${{ secrets.GAME_DEPLOY_KEY }}
           path: drahtseilakt
           persist-credentials: false
       - uses: vmactions/freebsd-vm@811efaaac0668df8bfb8308c3ec997b5ab50037b # v1.6.0
@@ -191,7 +203,7 @@ jobs:
         with:
           repository: ${{ env.GAME_REPO }}
           ref: ${{ needs.plan.outputs.game_sha }}
-          token: ${{ secrets.GAME_TOKEN }}
+          ssh-key: ${{ secrets.GAME_DEPLOY_KEY }}
           path: drahtseilakt
           sparse-checkout: assets/fonts
           persist-credentials: false

@@ -125,7 +125,7 @@ kein Paket haengt also vom Paket des Spiels ab. Real-ESRGAN (festgelegte Version
 liegt bei Linux x86_64, Windows x86_64 und macOS bei; bei den anderen Systemen sagt die `README.txt` des Pakets, dass es
 fehlt, und die Toolbox vergroessert Texturen dann mit Lanczos. `.deb` und `.rpm` legen Programm, Schriften und
 Real-ESRGAN nach `/usr/lib/drahtseilakt-toolbox/` mit einem Link in `/usr/bin`. Der Build braucht das Secret
-`GAME_TOKEN` (Lesezugriff auf das private Repository des Spiels, dessen Crates verwendet werden).
+`GAME_DEPLOY_KEY` (ein SSH-Deploy-Key mit Lesezugriff auf das private Repository des Spiels, dessen Crates verwendet werden).
 `scripts/ci-package.sh OS ARCH BINARY VERSION` erzeugt die Pakete aus einer gebauten Binaerdatei.
 
 ## Bauen

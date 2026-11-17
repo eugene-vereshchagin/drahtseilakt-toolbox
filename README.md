@@ -123,7 +123,7 @@ Every package carries the game's OFL fonts in `fonts/` beside the program (the w
 package depends on the game's. Real-ESRGAN (pinned and checked against its SHA-256, `third-party.txt`) is bundled on
 Linux x86_64, Windows x86_64 and macOS; on the other systems the package's `README.txt` says it is missing, and the
 toolbox then enlarges textures with Lanczos. The `.deb` and `.rpm` keep the program, its fonts and Real-ESRGAN in
-`/usr/lib/drahtseilakt-toolbox/` with a link in `/usr/bin`. The build needs the secret `GAME_TOKEN` (read access to the
+`/usr/lib/drahtseilakt-toolbox/` with a link in `/usr/bin`. The build needs the secret `GAME_DEPLOY_KEY` (an SSH deploy key with read-only access to the
 game's private repository, whose crates it builds on). `scripts/ci-package.sh OS ARCH BINARY VERSION` makes the
 packages from a built binary.
 

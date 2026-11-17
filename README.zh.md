@@ -46,7 +46,7 @@ toolbox 从不联网，也从不改动玩家的原版拷贝。
 | macOS arm64、x86_64 | 便携版 `.tar.gz`(未签名:见包内 `README.txt`) |
 | FreeBSD x86_64 | `.tar.gz`(实验性) |
 
-每个包都在程序旁的 `fonts/` 中带有游戏的 OFL 字体(窗口从那里读取),因此没有任何包依赖游戏的包。Real-ESRGAN(固定版本,校验 SHA-256,见 `third-party.txt`)随 Linux x86_64、Windows x86_64 和 macOS 的包提供;其他系统的包中 `README.txt` 会说明它缺失,此时工具箱改用 Lanczos 放大纹理。`.deb` 和 `.rpm` 把程序、字体和 Real-ESRGAN 放在 `/usr/lib/drahtseilakt-toolbox/`,并在 `/usr/bin` 放一个链接。构建需要密钥 `GAME_TOKEN`(对游戏私有仓库的只读权限,工具箱使用其 crate)。`scripts/ci-package.sh OS ARCH BINARY VERSION` 可由已构建的程序生成安装包。
+每个包都在程序旁的 `fonts/` 中带有游戏的 OFL 字体(窗口从那里读取),因此没有任何包依赖游戏的包。Real-ESRGAN(固定版本,校验 SHA-256,见 `third-party.txt`)随 Linux x86_64、Windows x86_64 和 macOS 的包提供;其他系统的包中 `README.txt` 会说明它缺失,此时工具箱改用 Lanczos 放大纹理。`.deb` 和 `.rpm` 把程序、字体和 Real-ESRGAN 放在 `/usr/lib/drahtseilakt-toolbox/`,并在 `/usr/bin` 放一个链接。构建需要密钥 `GAME_DEPLOY_KEY`(SSH 部署密钥,对游戏私有仓库的只读权限,工具箱使用其 crate)。`scripts/ci-package.sh OS ARCH BINARY VERSION` 可由已构建的程序生成安装包。
 
 ## 构建
 
