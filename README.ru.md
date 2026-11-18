@@ -9,6 +9,7 @@
 ```
 drahtseilakt-toolbox                     (окно)
 drahtseilakt-toolbox remaster [--levels LIST] [--scale N] [--model NAME] [--relief S] [--data DIR]
+drahtseilakt-toolbox sounds [--data DIR]
 drahtseilakt-toolbox remaster-open DIR [--scale N] [--model NAME] [--relief S]
 drahtseilakt-toolbox remaster-nmo FILE.nmo [--scale N] [--model NAME] [--relief S]
 drahtseilakt-toolbox relief DIR [--scale N] [--relief S]
@@ -102,32 +103,35 @@ DIR`, по умолчанию `community-unsorted` рядом с папкой у
 `source =`); уровень, чей источник нельзя посмотреть, остаётся. Строки, для которых в каталоге нет значения (свой
 `author =`), сохраняются.
 
-Toolbox никогда не выходит в сеть и не трогает оригинальную копию игрока.
+Правила: toolbox работает только с данными самого игрока; он не поставляет данные игры (звуковые темы и переделанные уровни остаются на машине игрока), никогда не выходит в сеть, не трогает оригинальную копию игрока и не меняет физику игры (то, что он добавляет в уровень, только рисуется).
 
 ## Загрузки и сборка релизов
 
-Релизы собирает GitHub Actions (`.github/workflows/toolbox-release.yml`, запуск вручную или тегом `X.Y.Z`; тег
-создаёт черновик релиза со всеми пакетами и `SHA256SUMS`):
+У toolbox свои релизы: [github.com/eugene-vereshchagin/drahtseilakt-toolbox/releases](https://github.com/eugene-vereshchagin/drahtseilakt-toolbox/releases) (версия 0.1.0; первый релиз ещё не опубликован). Он также входит в портативные архивы игры и в её установщик для Windows (ярлык в меню «Пуск»); общая картина того, что где поставляется, описана в [docs/drahtseilakt/distribution.md](https://github.com/eugene-vereshchagin/drahtseilakt/blob/main/docs/drahtseilakt/distribution.md) репозитория игры.
 
-| Система | Пакеты |
+Релизы собирает GitHub Actions (`.github/workflows/toolbox-release.yml`, запуск вручную или тегом `X.Y.Z`; тег
+создаёт черновик релиза со всеми пакетами и `SHA256SUMS`, который публикует владелец). В именах файлов нет версии (она остаётся в теге, заголовке и
+метаданных пакетов), поэтому `https://github.com/eugene-vereshchagin/drahtseilakt-toolbox/releases/latest/download/<имя>` всегда отдаёт самый новый релиз:
+
+| Система | Файлы |
 |---|---|
-| Windows x86_64, arm64 | установщик (`-setup.exe`), портативный `.zip` |
-| Linux x86_64, aarch64 | портативный `.tar.gz`, `.deb`, `.rpm` |
-| macOS arm64, x86_64 | портативный `.tar.gz` (без подписи: см. `README.txt` внутри) |
-| FreeBSD x86_64 | `.tar.gz` (экспериментально) |
+| Windows x86_64, arm64 | `drahtseilakt-toolbox-windows-<arch>-setup.exe` (установщик), `drahtseilakt-toolbox-windows-<arch>.zip` (портативный) |
+| Linux x86_64, aarch64 | `drahtseilakt-toolbox-linux-<arch>.tar.gz` (портативный), `drahtseilakt-toolbox_<amd64\|arm64>.deb`, `drahtseilakt-toolbox.<x86_64\|aarch64>.rpm` |
+| macOS arm64, x86_64 | `drahtseilakt-toolbox-macos-<arch>.tar.gz` (портативный; без подписи: см. `README.txt` внутри) |
+| FreeBSD x86_64 | `drahtseilakt-toolbox-freebsd-x86_64.tar.gz` (экспериментально) |
 
 В каждый пакет входят OFL-шрифты игры в `fonts/` рядом с программой (окно читает их оттуда), поэтому ни один пакет не
 зависит от пакета игры. Real-ESRGAN (версия закреплена, SHA-256 проверяется, `third-party.txt`) включён для Linux
 x86_64, Windows x86_64 и macOS; в остальных пакетах `README.txt` сообщает, что его нет, и инструмент увеличивает
 текстуры методом Ланцоша. `.deb` и `.rpm` кладут программу, шрифты и Real-ESRGAN в `/usr/lib/drahtseilakt-toolbox/`
-со ссылкой в `/usr/bin`. Для сборки нужен секрет `GAME_DEPLOY_KEY` (SSH-ключ развёртывания, только чтение закрытого репозитория игры, чьи крейты
-используются). `scripts/ci-package.sh OS ARCH BINARY VERSION` делает пакеты из готового бинарника.
+со ссылкой в `/usr/bin`. `scripts/ci-package.sh OS ARCH BINARY VERSION` делает пакеты из готового бинарника.
 
 ## Сборка
 
-Чтение уровней у toolbox общее с игрой: нужен клон репозитория игры рядом, в `../drahtseilakt`. Затем
-`cargo build --release --offline`. Для Real-ESRGAN распакуйте закреплённый архив в `third_party/realesrgan/` и
-сделайте ссылку `target/release/realesrgan` на эту папку.
+Чтение уровней у toolbox общее с крейтами игры, подключёнными по пути: нужен клон репозитория игры рядом, в `../drahtseilakt`. Затем
+`cargo build --release --offline` (сеть не нужна; зависимости закреплены в `Cargo.lock`). Для Real-ESRGAN распакуйте закреплённый архив в `third_party/realesrgan/` и
+сделайте ссылку `target/release/realesrgan` на эту папку. Репозиторий игры закрытый: CI забирает его с секретом
+`GAME_DEPLOY_KEY` (SSH-ключ развёртывания только для чтения).
 
 ## Кто сделал
 

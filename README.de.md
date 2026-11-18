@@ -9,6 +9,7 @@ Level-Ordnern liegt; alles Schwere, was Level modern aussehen lässt, lebt hier,
 ```
 drahtseilakt-toolbox                     (das Fenster)
 drahtseilakt-toolbox remaster [--levels LIST] [--scale N] [--model NAME] [--relief S] [--data DIR]
+drahtseilakt-toolbox sounds [--data DIR]
 drahtseilakt-toolbox remaster-open DIR [--scale N] [--model NAME] [--relief S]
 drahtseilakt-toolbox remaster-nmo FILE.nmo [--scale N] [--model NAME] [--relief S]
 drahtseilakt-toolbox relief DIR [--scale N] [--relief S]
@@ -106,33 +107,35 @@ nichts wird gelöscht). Verschoben werden nur Ordner, die import-maps gemacht ha
 `source =`); ein Level, dessen Quelle nicht angesehen werden kann, bleibt. Zeilen, für die der Katalog keinen Wert
 hat (ein eigenes `author =`), bleiben.
 
-Die Toolbox geht nie online und fasst die Originalkopie des Spielers nie an.
+Die Regeln: Die Toolbox arbeitet nur mit den eigenen Daten des Spielers; sie liefert nie Spieldaten aus (die Klangthemen und neu gemachten Level bleiben auf dem Rechner des Spielers), geht nie online, fasst die Originalkopie des Spielers nie an und lässt die Physik des Spiels unberührt (was sie einem Level hinzufügt, wird nur gezeichnet).
 
 ## Downloads und Release-Builds
 
+Die Toolbox hat eigene Releases: [github.com/eugene-vereshchagin/drahtseilakt-toolbox/releases](https://github.com/eugene-vereshchagin/drahtseilakt-toolbox/releases) (Version 0.1.0; das erste Release ist noch nicht veröffentlicht). Sie liegt auch in den portablen Archiven des Spiels und in dessen Windows-Installer (Verknüpfung im Startmenü); das Gesamtbild, was wo ausgeliefert wird, steht in [docs/drahtseilakt/distribution.md](https://github.com/eugene-vereshchagin/drahtseilakt/blob/main/docs/drahtseilakt/distribution.md) im Repository des Spiels.
+
 Releases baut GitHub Actions (`.github/workflows/toolbox-release.yml`, von Hand oder durch ein Tag `X.Y.Z` gestartet;
-das Tag erzeugt ein Release als Entwurf mit allen Paketen und `SHA256SUMS`):
+das Tag erzeugt ein Release als Entwurf mit allen Paketen und `SHA256SUMS`, das der Eigentümer veröffentlicht). Die Dateinamen enthalten keine Version (sie bleibt im Tag, im Titel und
+in den Metadaten der Pakete), daher liefert `https://github.com/eugene-vereshchagin/drahtseilakt-toolbox/releases/latest/download/<Name>` immer das neueste Release:
 
-| System | Pakete |
+| System | Dateien |
 |---|---|
-| Windows x86_64, arm64 | Installer (`-setup.exe`), portables `.zip` |
-| Linux x86_64, aarch64 | portables `.tar.gz`, `.deb`, `.rpm` |
-| macOS arm64, x86_64 | portables `.tar.gz` (nicht signiert: siehe `README.txt` darin) |
-| FreeBSD x86_64 | `.tar.gz` (experimentell) |
+| Windows x86_64, arm64 | `drahtseilakt-toolbox-windows-<arch>-setup.exe` (Installer), `drahtseilakt-toolbox-windows-<arch>.zip` (portabel) |
+| Linux x86_64, aarch64 | `drahtseilakt-toolbox-linux-<arch>.tar.gz` (portabel), `drahtseilakt-toolbox_<amd64\|arm64>.deb`, `drahtseilakt-toolbox.<x86_64\|aarch64>.rpm` |
+| macOS arm64, x86_64 | `drahtseilakt-toolbox-macos-<arch>.tar.gz` (portabel; nicht signiert: siehe `README.txt` darin) |
+| FreeBSD x86_64 | `drahtseilakt-toolbox-freebsd-x86_64.tar.gz` (experimentell) |
 
-Jedes Paket enthaelt die OFL-Schriften des Spiels in `fonts/` neben dem Programm (das Fenster liest sie von dort);
-kein Paket haengt also vom Paket des Spiels ab. Real-ESRGAN (festgelegte Version, SHA-256 geprueft, `third-party.txt`)
+Jedes Paket enthält die OFL-Schriften des Spiels in `fonts/` neben dem Programm (das Fenster liest sie von dort);
+kein Paket hängt also vom Paket des Spiels ab. Real-ESRGAN (festgelegte Version, SHA-256 geprüft, `third-party.txt`)
 liegt bei Linux x86_64, Windows x86_64 und macOS bei; bei den anderen Systemen sagt die `README.txt` des Pakets, dass es
-fehlt, und die Toolbox vergroessert Texturen dann mit Lanczos. `.deb` und `.rpm` legen Programm, Schriften und
-Real-ESRGAN nach `/usr/lib/drahtseilakt-toolbox/` mit einem Link in `/usr/bin`. Der Build braucht das Secret
-`GAME_DEPLOY_KEY` (ein SSH-Deploy-Key mit Lesezugriff auf das private Repository des Spiels, dessen Crates verwendet werden).
-`scripts/ci-package.sh OS ARCH BINARY VERSION` erzeugt die Pakete aus einer gebauten Binaerdatei.
+fehlt, und die Toolbox vergrößert Texturen dann mit Lanczos. `.deb` und `.rpm` legen Programm, Schriften und
+Real-ESRGAN nach `/usr/lib/drahtseilakt-toolbox/` mit einem Link in `/usr/bin`. `scripts/ci-package.sh OS ARCH BINARY VERSION` erzeugt die Pakete aus einer gebauten Binärdatei.
 
 ## Bauen
 
-Das Lesen der Level teilt die Toolbox mit dem Spiel: Sie braucht einen Klon des Spiel-Repositorys daneben, unter
-`../drahtseilakt`. Dann `cargo build --release --offline`. Für Real-ESRGAN den festgelegten Download nach
-`third_party/realesrgan/` entpacken und `target/release/realesrgan` darauf verlinken.
+Das Lesen der Level teilt die Toolbox mit den Crates des Spiels, die sie über den Pfad einbindet: Sie braucht einen Klon des Spiel-Repositorys daneben, unter
+`../drahtseilakt`. Dann `cargo build --release --offline` (kein Netz nötig; die Abhängigkeiten sind in `Cargo.lock` festgelegt). Für Real-ESRGAN den festgelegten Download nach
+`third_party/realesrgan/` entpacken und `target/release/realesrgan` darauf verlinken. Das Repository des Spiels ist privat: CI holt es mit dem
+Secret `GAME_DEPLOY_KEY` (ein SSH-Deploy-Key mit Lesezugriff).
 
 ## Wer es gemacht hat
 

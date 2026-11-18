@@ -7,6 +7,7 @@
 ```
 drahtseilakt-toolbox                     （窗口）
 drahtseilakt-toolbox remaster [--levels LIST] [--scale N] [--model NAME] [--relief S] [--data DIR]
+drahtseilakt-toolbox sounds [--data DIR]
 drahtseilakt-toolbox remaster-open DIR [--scale N] [--model NAME] [--relief S]
 drahtseilakt-toolbox remaster-nmo FILE.nmo [--scale N] [--model NAME] [--relief S]
 drahtseilakt-toolbox relief DIR [--scale N] [--relief S]
@@ -33,24 +34,26 @@ drahtseilakt-toolbox import-maps --refresh DIR --catalogue FILE [--source DIR] [
 
 `import-maps --refresh DIR --catalogue FILE --source DIR` 就地把之前导入的关卡文件夹（`levels/user-levels`）更新为目录中的信息：每个关卡的 `level.txt` 按目录重写（按其 `source =` 行和文件夹名查找；注释、`source =` 行和其他行保留）；不是单个关卡的文件夹（没有地图或有多张），或其地图既不在目录中也没有 readme（在其文件夹中，或在合集 `--source DIR` 中其来源旁边，`source =` 的路径相对于该合集）的关卡文件夹，会被移动到待整理文件夹（在同一磁盘上重命名，从不删除）。只会移动由 import-maps 创建的文件夹（`level.txt` 中有 `source =` 行）；无法查看来源的关卡保留不动。目录中没有对应值的行（例如你自己写的 `author =`）会保留。
 
-toolbox 从不联网，也从不改动玩家的原版拷贝。
+规则：toolbox 只处理玩家自己的数据；从不附带游戏数据（它生成的音效主题和重制关卡只留在玩家的电脑上），从不联网，从不改动玩家的原版拷贝，也不触碰游戏的物理（它给关卡添加的内容只用于绘制）。
 
 ## 下载与发布构建
 
-发布版本由 GitHub Actions 构建(`.github/workflows/toolbox-release.yml`,手动启动或由标签 `X.Y.Z` 触发;标签会创建包含全部安装包和 `SHA256SUMS` 的草稿发布):
+toolbox 有自己的发布页：[github.com/eugene-vereshchagin/drahtseilakt-toolbox/releases](https://github.com/eugene-vereshchagin/drahtseilakt-toolbox/releases)（版本 0.1.0；第一个发布版尚未公开）。它也包含在游戏的便携版压缩包和游戏的 Windows 安装程序中（开始菜单里有快捷方式）；各处分别提供什么的整体情况见游戏仓库中的 [docs/drahtseilakt/distribution.md](https://github.com/eugene-vereshchagin/drahtseilakt/blob/main/docs/drahtseilakt/distribution.md)。
 
-| 系统 | 安装包 |
+发布版本由 GitHub Actions 构建（`.github/workflows/toolbox-release.yml`，手动启动或由标签 `X.Y.Z` 触发；标签会创建包含全部安装包和 `SHA256SUMS` 的草稿发布，由所有者公开）。文件名中不带版本号（版本保留在标签、标题和安装包的元数据中），因此 `https://github.com/eugene-vereshchagin/drahtseilakt-toolbox/releases/latest/download/<文件名>` 始终指向最新发布：
+
+| 系统 | 文件 |
 |---|---|
-| Windows x86_64、arm64 | 安装程序(`-setup.exe`)、便携版 `.zip` |
-| Linux x86_64、aarch64 | 便携版 `.tar.gz`、`.deb`、`.rpm` |
-| macOS arm64、x86_64 | 便携版 `.tar.gz`(未签名:见包内 `README.txt`) |
-| FreeBSD x86_64 | `.tar.gz`(实验性) |
+| Windows x86_64、arm64 | `drahtseilakt-toolbox-windows-<arch>-setup.exe`（安装程序）、`drahtseilakt-toolbox-windows-<arch>.zip`（便携版） |
+| Linux x86_64、aarch64 | `drahtseilakt-toolbox-linux-<arch>.tar.gz`（便携版）、`drahtseilakt-toolbox_<amd64\|arm64>.deb`、`drahtseilakt-toolbox.<x86_64\|aarch64>.rpm` |
+| macOS arm64、x86_64 | `drahtseilakt-toolbox-macos-<arch>.tar.gz`（便携版；未签名：见包内 `README.txt`） |
+| FreeBSD x86_64 | `drahtseilakt-toolbox-freebsd-x86_64.tar.gz`（实验性） |
 
-每个包都在程序旁的 `fonts/` 中带有游戏的 OFL 字体(窗口从那里读取),因此没有任何包依赖游戏的包。Real-ESRGAN(固定版本,校验 SHA-256,见 `third-party.txt`)随 Linux x86_64、Windows x86_64 和 macOS 的包提供;其他系统的包中 `README.txt` 会说明它缺失,此时工具箱改用 Lanczos 放大纹理。`.deb` 和 `.rpm` 把程序、字体和 Real-ESRGAN 放在 `/usr/lib/drahtseilakt-toolbox/`,并在 `/usr/bin` 放一个链接。构建需要密钥 `GAME_DEPLOY_KEY`(SSH 部署密钥,对游戏私有仓库的只读权限,工具箱使用其 crate)。`scripts/ci-package.sh OS ARCH BINARY VERSION` 可由已构建的程序生成安装包。
+每个包都在程序旁的 `fonts/` 中带有游戏的 OFL 字体（窗口从那里读取），因此没有任何包依赖游戏的包。Real-ESRGAN（固定版本，校验 SHA-256，见 `third-party.txt`）随 Linux x86_64、Windows x86_64 和 macOS 的包提供；其他系统的包中 `README.txt` 会说明它缺失，此时工具箱改用 Lanczos 放大纹理。`.deb` 和 `.rpm` 把程序、字体和 Real-ESRGAN 放在 `/usr/lib/drahtseilakt-toolbox/`，并在 `/usr/bin` 放一个链接。`scripts/ci-package.sh OS ARCH BINARY VERSION` 可由已构建的程序生成安装包。
 
 ## 构建
 
-toolbox 与游戏共用关卡读取代码：需要在旁边的 `../drahtseilakt` 放一份游戏仓库的克隆。然后执行 `cargo build --release --offline`。若要使用 Real-ESRGAN，把固定版本的下载包解压到 `third_party/realesrgan/`，并把 `target/release/realesrgan` 链接到该目录。
+toolbox 通过路径引用游戏的 crate 来共用关卡读取代码：需要在旁边的 `../drahtseilakt` 放一份游戏仓库的克隆。然后执行 `cargo build --release --offline`（无需联网；依赖固定在 `Cargo.lock` 中）。若要使用 Real-ESRGAN，把固定版本的下载包解压到 `third_party/realesrgan/`，并把 `target/release/realesrgan` 链接到该目录。游戏仓库是私有的：CI 使用密钥 `GAME_DEPLOY_KEY`（只读的 SSH 部署密钥）来检出它。
 
 ## 谁做的
 

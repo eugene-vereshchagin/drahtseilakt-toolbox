@@ -9,6 +9,7 @@ folders; everything heavy that makes levels look modern lives here, so the game 
 ```
 drahtseilakt-toolbox                     (the window)
 drahtseilakt-toolbox remaster [--levels LIST] [--scale N] [--model NAME] [--relief S] [--data DIR]
+drahtseilakt-toolbox sounds [--data DIR]
 drahtseilakt-toolbox remaster-open DIR [--scale N] [--model NAME] [--relief S]
 drahtseilakt-toolbox remaster-nmo FILE.nmo [--scale N] [--model NAME] [--relief S]
 drahtseilakt-toolbox relief DIR [--scale N] [--relief S]
@@ -105,33 +106,36 @@ unsorted folder (renamed on the same disk; nothing is deleted). Only folders imp
 `source =` line) are ever moved; a level whose source cannot be looked at is kept. Lines the catalogue has no value
 for (an `author =` of your own) are kept.
 
-The toolbox never goes online and never touches the player's original copy.
+The rules: the toolbox works on the player's own data only; it never ships game data (the sound themes and remastered levels it makes stay on the player's machine), never goes online, never touches the player's original copy, and leaves the game's physics alone (what it adds to a level is only drawn).
 
 ## Downloads and release builds
 
-Releases are built by GitHub Actions (`.github/workflows/toolbox-release.yml`, started by hand or by a tag `X.Y.Z`; the
-tag makes a draft release with every package and `SHA256SUMS`):
+The toolbox has its own releases at [github.com/eugene-vereshchagin/drahtseilakt-toolbox/releases](https://github.com/eugene-vereshchagin/drahtseilakt-toolbox/releases) (the version is 0.1.0; the first release is not published yet). It is also inside the game's portable archives and the game's Windows installer (a Start menu shortcut); the overall picture of what is shipped where is in the game's [docs/drahtseilakt/distribution.md](https://github.com/eugene-vereshchagin/drahtseilakt/blob/main/docs/drahtseilakt/distribution.md).
 
-| System | Packages |
+Releases are built by GitHub Actions (`.github/workflows/toolbox-release.yml`, started by hand or by a tag `X.Y.Z`; the
+tag makes a draft release with every package and `SHA256SUMS`, which the owner publishes). The file names carry no version (it stays in the tag, the title and the
+packages' metadata), so `https://github.com/eugene-vereshchagin/drahtseilakt-toolbox/releases/latest/download/<name>` always gives the newest release:
+
+| System | Files |
 |---|---|
-| Windows x86_64, arm64 | installer (`-setup.exe`), portable `.zip` |
-| Linux x86_64, aarch64 | portable `.tar.gz`, `.deb`, `.rpm` |
-| macOS arm64, x86_64 | portable `.tar.gz` (not signed: see the `README.txt` inside) |
-| FreeBSD x86_64 | `.tar.gz` (experimental) |
+| Windows x86_64, arm64 | `drahtseilakt-toolbox-windows-<arch>-setup.exe` (installer), `drahtseilakt-toolbox-windows-<arch>.zip` (portable) |
+| Linux x86_64, aarch64 | `drahtseilakt-toolbox-linux-<arch>.tar.gz` (portable), `drahtseilakt-toolbox_<amd64\|arm64>.deb`, `drahtseilakt-toolbox.<x86_64\|aarch64>.rpm` |
+| macOS arm64, x86_64 | `drahtseilakt-toolbox-macos-<arch>.tar.gz` (portable; not signed: see the `README.txt` inside) |
+| FreeBSD x86_64 | `drahtseilakt-toolbox-freebsd-x86_64.tar.gz` (experimental) |
 
 Every package carries the game's OFL fonts in `fonts/` beside the program (the window reads them from there), so no
 package depends on the game's. Real-ESRGAN (pinned and checked against its SHA-256, `third-party.txt`) is bundled on
 Linux x86_64, Windows x86_64 and macOS; on the other systems the package's `README.txt` says it is missing, and the
 toolbox then enlarges textures with Lanczos. The `.deb` and `.rpm` keep the program, its fonts and Real-ESRGAN in
-`/usr/lib/drahtseilakt-toolbox/` with a link in `/usr/bin`. The build needs the secret `GAME_DEPLOY_KEY` (an SSH deploy key with read-only access to the
-game's private repository, whose crates it builds on). `scripts/ci-package.sh OS ARCH BINARY VERSION` makes the
+`/usr/lib/drahtseilakt-toolbox/` with a link in `/usr/bin`. `scripts/ci-package.sh OS ARCH BINARY VERSION` makes the
 packages from a built binary.
 
 ## Building
 
-The toolbox shares the level reading with the game: it needs a checkout of the game's repository beside this one,
-at `../drahtseilakt`. Then `cargo build --release --offline`. For Real-ESRGAN, unpack the pinned download
-into `third_party/realesrgan/` and link `target/release/realesrgan` to it.
+The toolbox shares the level reading with the game's crates, used by path: it needs a checkout of the game's repository beside this one,
+at `../drahtseilakt`. Then `cargo build --release --offline` (no network is needed; dependencies are pinned in `Cargo.lock`). For Real-ESRGAN, unpack the pinned download
+into `third_party/realesrgan/` and link `target/release/realesrgan` to it. The game's repository is private: CI checks it out with the
+secret `GAME_DEPLOY_KEY` (an SSH deploy key with read-only access to it).
 
 ## Who made it
 
