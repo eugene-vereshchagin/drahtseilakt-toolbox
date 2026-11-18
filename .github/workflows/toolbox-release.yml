@@ -107,6 +107,11 @@ jobs:
       # the files exactly as committed (Windows runners convert line ends by default)
       - name: no line-end conversion
         run: git config --global core.autocrlf false
+      # checkout fetches the game with the deploy key through the first ssh on the PATH; on windows-11-arm that is
+      # Windows' OpenSSH, which refuses the key file checkout writes ("bad permissions"). Git's own ssh does not.
+      - name: Git's ssh first (Windows)
+        if: matrix.os == 'windows'
+        run: echo 'C:\Program Files\Git\usr\bin' >>"$GITHUB_PATH"
       # the toolbox takes the game's crates by path ../drahtseilakt: both checked out side by side
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
