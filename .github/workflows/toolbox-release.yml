@@ -265,17 +265,6 @@ jobs:
           cd dist
           ls -l
           sha256sum --check --strict SHA256SUMS
-          shopt -s nullglob
-          # stable names: the version leaves the file names (it stays in the tag, the title and the packages' metadata), so
-          # https://github.com/<repo>/releases/latest/download/<name> always gives the newest release (the site links so)
-          t=${TAG//./\\.}
-          for f in *.tar.gz *.zip *.deb *.rpm *.dmg *.exe; do
-            [ -e "$f" ] || continue
-            n=$(sed -E "s/[-_]${t}(-1)?([-_.])/\\2/; s/[-_]20[0-9]{6}-1([-_.])/\\1/" <<<"$f")
-            [ "$n" = "$f" ] || { [ ! -e "$n" ] || { echo "::error::$f and $n collide"; exit 1; }; mv -- "$f" "$n"; }
-          done
-          sha256sum -- *.tar.gz *.zip *.deb *.rpm *.exe > SHA256SUMS
-          cat SHA256SUMS
           gh release create "$TAG" --draft --verify-tag --title "Drahtseilakt toolbox $TAG" \
             --notes "Drahtseilakt toolbox $TAG: Windows installer and portable zip, Linux portable archive, .deb and .rpm, macOS and FreeBSD archives. Check the files against SHA256SUMS. macOS builds are not signed (README.txt in the archive says how to open them). FreeBSD is experimental. Real-ESRGAN is bundled on Linux x86_64, Windows x86_64 and macOS only; README.txt in each package says whether it is included." \
             -- *.tar.gz *.zip *.deb *.rpm *.exe SHA256SUMS
