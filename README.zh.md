@@ -40,14 +40,14 @@ drahtseilakt-toolbox import-maps --refresh DIR --catalogue FILE [--source DIR] [
 
 toolbox 有自己的发布页：[github.com/eugene-vereshchagin/drahtseilakt-toolbox/releases](https://github.com/eugene-vereshchagin/drahtseilakt-toolbox/releases)（版本 0.1.0；第一个发布版尚未公开）。它也包含在游戏的便携版压缩包和游戏的 Windows 安装程序中（开始菜单里有快捷方式）；各处分别提供什么的整体情况见游戏仓库中的 [docs/drahtseilakt/distribution.md](https://github.com/eugene-vereshchagin/drahtseilakt/blob/main/docs/drahtseilakt/distribution.md)。
 
-发布版本由 GitHub Actions 构建（`.github/workflows/toolbox-release.yml`，手动启动或由标签 `X.Y.Z` 触发；标签会创建包含全部安装包和 `SHA256SUMS` 的草稿发布，由所有者公开）。文件名中不带版本号（版本保留在标签、标题和安装包的元数据中），因此 `https://github.com/eugene-vereshchagin/drahtseilakt-toolbox/releases/latest/download/<文件名>` 始终指向最新发布：
+发布版本由 GitHub Actions 构建（`.github/workflows/toolbox-release.yml`，手动启动或由标签 `X.Y.Z` 触发；标签会创建包含全部安装包和 `SHA256SUMS` 的草稿发布，由所有者公开）。文件名保留版本号（下文 `<version>`），方便阅读。最新发布：`https://github.com/eugene-vereshchagin/drahtseilakt-toolbox/releases/latest`；脚本或网站通过 API 获取（`GET https://api.github.com/repos/eugene-vereshchagin/drahtseilakt-toolbox/releases/latest`），在 `assets[]` 中选 `name` 符合如 `drahtseilakt-toolbox-*-windows-x86_64-setup.exe` 的文件，使用它的 `browser_download_url`：
 
 | 系统 | 文件 |
 |---|---|
-| Windows x86_64、arm64 | `drahtseilakt-toolbox-windows-<arch>-setup.exe`（安装程序）、`drahtseilakt-toolbox-windows-<arch>.zip`（便携版） |
-| Linux x86_64、aarch64 | `drahtseilakt-toolbox-linux-<arch>.tar.gz`（便携版）、`drahtseilakt-toolbox_<amd64\|arm64>.deb`、`drahtseilakt-toolbox.<x86_64\|aarch64>.rpm` |
-| macOS arm64、x86_64 | `drahtseilakt-toolbox-macos-<arch>.tar.gz`（便携版；未签名：见包内 `README.txt`） |
-| FreeBSD x86_64 | `drahtseilakt-toolbox-freebsd-x86_64.tar.gz`（实验性） |
+| Windows x86_64、arm64 | `drahtseilakt-toolbox-<version>-windows-<arch>-setup.exe`（安装程序）、`drahtseilakt-toolbox-<version>-windows-<arch>.zip`（便携版） |
+| Linux x86_64、aarch64 | `drahtseilakt-toolbox-<version>-linux-<arch>.tar.gz`（便携版）、`drahtseilakt-toolbox_<version>-1_<amd64\|arm64>.deb`、`drahtseilakt-toolbox-<version>-1.<x86_64\|aarch64>.rpm` |
+| macOS arm64、x86_64 | `drahtseilakt-toolbox-<version>-macos-<arch>.tar.gz`（便携版；未签名：见包内 `README.txt`） |
+| FreeBSD x86_64 | `drahtseilakt-toolbox-<version>-freebsd-x86_64.tar.gz`（实验性） |
 
 每个包都在程序旁的 `fonts/` 中带有游戏的 OFL 字体（窗口从那里读取），因此没有任何包依赖游戏的包。Real-ESRGAN（固定版本，校验 SHA-256，见 `third-party.txt`）随 Linux x86_64、Windows x86_64 和 macOS 的包提供；其他系统的包中 `README.txt` 会说明它缺失，此时工具箱改用 Lanczos 放大纹理。`.deb` 和 `.rpm` 把程序、字体和 Real-ESRGAN 放在 `/usr/lib/drahtseilakt-toolbox/`，并在 `/usr/bin` 放一个链接。`scripts/ci-package.sh OS ARCH BINARY VERSION` 可由已构建的程序生成安装包。
 

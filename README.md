@@ -113,15 +113,14 @@ The rules: the toolbox works on the player's own data only; it never ships game 
 The toolbox has its own releases at [github.com/eugene-vereshchagin/drahtseilakt-toolbox/releases](https://github.com/eugene-vereshchagin/drahtseilakt-toolbox/releases) (the version is 0.1.0; the first release is not published yet). It is also inside the game's portable archives and the game's Windows installer (a Start menu shortcut); the overall picture of what is shipped where is in the game's [docs/drahtseilakt/distribution.md](https://github.com/eugene-vereshchagin/drahtseilakt/blob/main/docs/drahtseilakt/distribution.md).
 
 Releases are built by GitHub Actions (`.github/workflows/toolbox-release.yml`, started by hand or by a tag `X.Y.Z`; the
-tag makes a draft release with every package and `SHA256SUMS`, which the owner publishes). The file names carry no version (it stays in the tag, the title and the
-packages' metadata), so `https://github.com/eugene-vereshchagin/drahtseilakt-toolbox/releases/latest/download/<name>` always gives the newest release:
+tag makes a draft release with every package and `SHA256SUMS`, which the owner publishes). The file names keep the version (`<version>` below), so people can read it. The newest release: `https://github.com/eugene-vereshchagin/drahtseilakt-toolbox/releases/latest`; a script or site takes it from the API (`GET https://api.github.com/repos/eugene-vereshchagin/drahtseilakt-toolbox/releases/latest`), picks from `assets[]` the file whose `name` matches e.g. `drahtseilakt-toolbox-*-windows-x86_64-setup.exe` and uses its `browser_download_url`:
 
 | System | Files |
 |---|---|
-| Windows x86_64, arm64 | `drahtseilakt-toolbox-windows-<arch>-setup.exe` (installer), `drahtseilakt-toolbox-windows-<arch>.zip` (portable) |
-| Linux x86_64, aarch64 | `drahtseilakt-toolbox-linux-<arch>.tar.gz` (portable), `drahtseilakt-toolbox_<amd64\|arm64>.deb`, `drahtseilakt-toolbox.<x86_64\|aarch64>.rpm` |
-| macOS arm64, x86_64 | `drahtseilakt-toolbox-macos-<arch>.tar.gz` (portable; not signed: see the `README.txt` inside) |
-| FreeBSD x86_64 | `drahtseilakt-toolbox-freebsd-x86_64.tar.gz` (experimental) |
+| Windows x86_64, arm64 | `drahtseilakt-toolbox-<version>-windows-<arch>-setup.exe` (installer), `drahtseilakt-toolbox-<version>-windows-<arch>.zip` (portable) |
+| Linux x86_64, aarch64 | `drahtseilakt-toolbox-<version>-linux-<arch>.tar.gz` (portable), `drahtseilakt-toolbox_<version>-1_<amd64\|arm64>.deb`, `drahtseilakt-toolbox-<version>-1.<x86_64\|aarch64>.rpm` |
+| macOS arm64, x86_64 | `drahtseilakt-toolbox-<version>-macos-<arch>.tar.gz` (portable; not signed: see the `README.txt` inside) |
+| FreeBSD x86_64 | `drahtseilakt-toolbox-<version>-freebsd-x86_64.tar.gz` (experimental) |
 
 Every package carries the game's OFL fonts in `fonts/` beside the program (the window reads them from there), so no
 package depends on the game's. Real-ESRGAN (pinned and checked against its SHA-256, `third-party.txt`) is bundled on

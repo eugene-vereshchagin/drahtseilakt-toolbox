@@ -110,15 +110,14 @@ DIR`, по умолчанию `community-unsorted` рядом с папкой у
 У toolbox свои релизы: [github.com/eugene-vereshchagin/drahtseilakt-toolbox/releases](https://github.com/eugene-vereshchagin/drahtseilakt-toolbox/releases) (версия 0.1.0; первый релиз ещё не опубликован). Он также входит в портативные архивы игры и в её установщик для Windows (ярлык в меню «Пуск»); общая картина того, что где поставляется, описана в [docs/drahtseilakt/distribution.md](https://github.com/eugene-vereshchagin/drahtseilakt/blob/main/docs/drahtseilakt/distribution.md) репозитория игры.
 
 Релизы собирает GitHub Actions (`.github/workflows/toolbox-release.yml`, запуск вручную или тегом `X.Y.Z`; тег
-создаёт черновик релиза со всеми пакетами и `SHA256SUMS`, который публикует владелец). В именах файлов нет версии (она остаётся в теге, заголовке и
-метаданных пакетов), поэтому `https://github.com/eugene-vereshchagin/drahtseilakt-toolbox/releases/latest/download/<имя>` всегда отдаёт самый новый релиз:
+создаёт черновик релиза со всеми пакетами и `SHA256SUMS`, который публикует владелец). В именах файлов остаётся версия (ниже `<version>`), чтобы её было видно. Самый свежий релиз: `https://github.com/eugene-vereshchagin/drahtseilakt-toolbox/releases/latest`; скрипт или сайт берёт его из API (`GET https://api.github.com/repos/eugene-vereshchagin/drahtseilakt-toolbox/releases/latest`), выбирает в `assets[]` файл, чьё `name` подходит, например, под `drahtseilakt-toolbox-*-windows-x86_64-setup.exe`, и использует его `browser_download_url`:
 
 | Система | Файлы |
 |---|---|
-| Windows x86_64, arm64 | `drahtseilakt-toolbox-windows-<arch>-setup.exe` (установщик), `drahtseilakt-toolbox-windows-<arch>.zip` (портативный) |
-| Linux x86_64, aarch64 | `drahtseilakt-toolbox-linux-<arch>.tar.gz` (портативный), `drahtseilakt-toolbox_<amd64\|arm64>.deb`, `drahtseilakt-toolbox.<x86_64\|aarch64>.rpm` |
-| macOS arm64, x86_64 | `drahtseilakt-toolbox-macos-<arch>.tar.gz` (портативный; без подписи: см. `README.txt` внутри) |
-| FreeBSD x86_64 | `drahtseilakt-toolbox-freebsd-x86_64.tar.gz` (экспериментально) |
+| Windows x86_64, arm64 | `drahtseilakt-toolbox-<version>-windows-<arch>-setup.exe` (установщик), `drahtseilakt-toolbox-<version>-windows-<arch>.zip` (портативный) |
+| Linux x86_64, aarch64 | `drahtseilakt-toolbox-<version>-linux-<arch>.tar.gz` (портативный), `drahtseilakt-toolbox_<version>-1_<amd64\|arm64>.deb`, `drahtseilakt-toolbox-<version>-1.<x86_64\|aarch64>.rpm` |
+| macOS arm64, x86_64 | `drahtseilakt-toolbox-<version>-macos-<arch>.tar.gz` (портативный; без подписи: см. `README.txt` внутри) |
+| FreeBSD x86_64 | `drahtseilakt-toolbox-<version>-freebsd-x86_64.tar.gz` (экспериментально) |
 
 В каждый пакет входят OFL-шрифты игры в `fonts/` рядом с программой (окно читает их оттуда), поэтому ни один пакет не
 зависит от пакета игры. Real-ESRGAN (версия закреплена, SHA-256 проверяется, `third-party.txt`) включён для Linux
