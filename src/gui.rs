@@ -177,6 +177,8 @@ struct App {
     models: Vec<String>,
     model: String,
     relief: f32,
+    /// Take over the progress (unlocked levels, highscores) of the copy's Database.tdb with the run.
+    take_progress: bool,
     /// The technical settings (the model, the relief) are shown.
     advanced: bool,
     /// The result is to be scrolled into view (a run has started or ended).
@@ -222,6 +224,7 @@ impl App {
             models,
             model,
             relief: 0.0,
+            take_progress: false,
             advanced: false,
             reveal: false,
             maps_field: String::new(),
@@ -246,6 +249,7 @@ impl App {
         let cancel = Arc::new(AtomicBool::new(false));
         let (stop, ctx2) = (cancel.clone(), ctx.clone());
         let (scale, model, relief) = (self.scale, self.model.clone(), self.relief);
+        let take_progress = self.take_progress;
         let last_dir = self.last_dir.clone();
         remember(&model, scale, last_dir.as_deref());
         std::thread::spawn(move || {
@@ -269,6 +273,9 @@ impl App {
                 .and_then(|mut lines| {
                     let sounds = gamedata::profile::data_dir().join("sounds");
                     lines.push(remaster::original_sounds(&data, &sounds)?);
+                    if take_progress && let Some(root) = &data.root {
+                        lines.push(crate::progress::take(root, &gamedata::profile::data_dir())?);
+                    }
                     Ok(lines)
                 });
             let _ = send.send(result.map(|_| Progress::Step {
@@ -527,6 +534,11 @@ impl App {
             ui.label(texts::SCALE.get(l));
             ui.add_enabled(!busy, egui::Slider::new(&mut self.scale, 1..=8).suffix("×"));
         });
+        ui.add_enabled(
+            !busy,
+            egui::Checkbox::new(&mut self.take_progress, texts::TAKE_PROGRESS.get(l)),
+        );
+        caption(ui, texts::TAKE_PROGRESS_HINT.get(l));
         theme::fold(ui, texts::ADVANCED.get(l), &mut self.advanced);
         if self.advanced {
             ui.horizontal_wrapped(|ui| {

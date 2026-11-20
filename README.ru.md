@@ -8,7 +8,8 @@
 
 ```
 drahtseilakt-toolbox                     (окно)
-drahtseilakt-toolbox remaster [--levels LIST] [--scale N] [--model NAME] [--relief S] [--data DIR]
+drahtseilakt-toolbox remaster [--levels LIST] [--scale N] [--model NAME] [--relief S] [--progress] [--data DIR]
+drahtseilakt-toolbox progress [--data DIR]
 drahtseilakt-toolbox sounds [--data DIR]
 drahtseilakt-toolbox remaster-open DIR [--scale N] [--model NAME] [--relief S]
 drahtseilakt-toolbox remaster-nmo FILE.nmo [--scale N] [--model NAME] [--relief S]
@@ -16,6 +17,8 @@ drahtseilakt-toolbox relief DIR [--scale N] [--relief S]
 drahtseilakt-toolbox import-maps DIR [--to DIR] [--catalogue FILE] [--unsorted DIR]
 drahtseilakt-toolbox import-maps --refresh DIR --catalogue FILE [--source DIR] [--unsorted DIR]
 ```
+
+**Перенести мой прогресс.** Флажок под настройками текстур (и команда `progress [--data DIR]`, или `remaster --progress`) читает `Database.tdb` выбранной папки Ballance и добавляет её открытые уровни и рекорды в папку данных игры (`unlocked.txt`, `highscores.txt`). Только добавляет: открытые уровни объединяются, каждый список хранит лучшие десять из обоих; повторный запуск ничего не меняет.
 
 **Папки (2026-11-12).** В `levels/` игры лежат `ballance-original/` (ваша копия), `ballance-remaster/` (сюда пишет `remaster`) и `user-levels/` (сюда по умолчанию пишет `import-maps`; прежние имена `original/`, `remastered/` и `downloaded/` игра переименовывает при первом запуске). Уровень считается уровнем, только если он лежит в собственной именованной папке, где есть либо один файл `.nmo`, либо уровень в открытом формате, и файл описания `level.txt`: именно так раскладывает `import-maps`.
 

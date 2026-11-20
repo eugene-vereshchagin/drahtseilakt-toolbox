@@ -14,6 +14,7 @@ mod gui;
 mod import;
 mod masonry;
 mod normals;
+mod progress;
 mod remaster;
 mod smooth;
 mod texts;
@@ -33,6 +34,10 @@ commands:
                       every level there its rounder shapes and make its textures larger; the game lists them in
                       Custom levels. Run it again after a newer toolbox to bring the levels up to date.
                       Brickwork in concrete is told by its colour and drawn with depth (masonry relief).
+  progress            take over the player's progress from the copy's Database.tdb (--data DIR is the Ballance folder):
+                      unlocked levels and highscores are added to the game's data folder; nothing is ever lowered
+                      or removed (the unlocked levels are a union, the highscore lists keep the best ten of both).
+                      remaster --progress does the same after the remaster
   sounds              make only the 'original' sound theme from the copy's sounds and music (remaster makes
                       it too); it stays in the game's data folder, never shared
   remaster-open DIR   the remaster of one open-format level folder in place (no copy of the original needed): rounder
@@ -76,6 +81,7 @@ options:
                       (default community-unsorted beside the levels folder)
   --source DIR        with import-maps --refresh: the collection the levels were imported from
   --refresh DIR       see import-maps
+  --progress          with remaster: also take over the progress (see progress)
   --data DIR          the Ballance folder (default: $OPENBALLANCE_DATA, then the copy the game imported)
   -h, --help          this text
 ";
@@ -85,6 +91,8 @@ struct Options {
     scale: u32,
     model: String,
     relief: f32,
+    /// `--progress`: take over the progress too.
+    progress: bool,
     /// `--levels`: the remastered level folders to make (empty: all).
     levels: Vec<String>,
     data: Option<PathBuf>,
@@ -104,6 +112,7 @@ fn options(args: impl Iterator<Item = String>) -> Result<Options, String> {
         scale: 4,
         model: "realesrgan-x4plus".into(),
         relief: 0.0,
+        progress: false,
         levels: Vec::new(),
         data: None,
         folder: None,
@@ -123,6 +132,7 @@ fn options(args: impl Iterator<Item = String>) -> Result<Options, String> {
                     .map_err(|_| "--scale needs a number (1 to 32)".to_owned())?;
                 o.scale = n.clamp(1, 32);
             }
+            "--progress" => o.progress = true,
             "--data" => o.data = Some(value()?.into()),
             "--levels" => {
                 o.levels = value()?
@@ -167,6 +177,22 @@ fn main() -> ExitCode {
                 for line in remaster::run(&data, o.scale, &o.model, o.relief, &o.levels)? {
                     println!("{line}");
                 }
+                if o.progress {
+                    let root = data
+                        .root
+                        .as_deref()
+                        .ok_or("no Ballance folder for --progress")?;
+                    println!("{}", progress::take(root, &gamedata::profile::data_dir())?);
+                }
+                Ok(())
+            }
+            Some("progress") => {
+                let data = gamedata::assets::Data::locate(o.data)?;
+                let root = data
+                    .root
+                    .as_deref()
+                    .ok_or("no Ballance folder: give --data DIR")?;
+                println!("{}", progress::take(root, &gamedata::profile::data_dir())?);
                 Ok(())
             }
             Some("sounds") => {

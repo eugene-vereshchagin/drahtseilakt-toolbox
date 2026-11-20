@@ -6,7 +6,8 @@
 
 ```
 drahtseilakt-toolbox                     （窗口）
-drahtseilakt-toolbox remaster [--levels LIST] [--scale N] [--model NAME] [--relief S] [--data DIR]
+drahtseilakt-toolbox remaster [--levels LIST] [--scale N] [--model NAME] [--relief S] [--progress] [--data DIR]
+drahtseilakt-toolbox progress [--data DIR]
 drahtseilakt-toolbox sounds [--data DIR]
 drahtseilakt-toolbox remaster-open DIR [--scale N] [--model NAME] [--relief S]
 drahtseilakt-toolbox remaster-nmo FILE.nmo [--scale N] [--model NAME] [--relief S]
@@ -14,6 +15,8 @@ drahtseilakt-toolbox relief DIR [--scale N] [--relief S]
 drahtseilakt-toolbox import-maps DIR [--to DIR] [--catalogue FILE] [--unsorted DIR]
 drahtseilakt-toolbox import-maps --refresh DIR --catalogue FILE [--source DIR] [--unsorted DIR]
 ```
+
+**沿用我的进度。** 纹理设置下方的复选框（以及命令 `progress [--data DIR]` 或 `remaster --progress`）会读取所选 Ballance 文件夹中的 `Database.tdb`，把其中已解锁的关卡和高分添加到游戏的数据文件夹（`unlocked.txt`、`highscores.txt`）。只增不减：解锁的关卡取并集，每个榜单保留两者中最好的十条；再次运行不会改变任何内容。
 
 **文件夹（2026-11-12）。** 游戏的 `levels/` 中有 `ballance-original/`（你的副本）、`ballance-remaster/`（`remaster` 写入这里）和 `user-levels/`（`import-maps` 默认写入这里；旧名称 `original/`、`remastered/`、`downloaded/` 由游戏在首次启动时改名）。只有当一个关卡位于自己的命名文件夹中，且该文件夹里有一个 `.nmo` 文件或一个开放格式关卡，再加上描述文件 `level.txt`，它才算关卡：`import-maps` 正是这样整理的。
 

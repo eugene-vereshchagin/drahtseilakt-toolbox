@@ -8,7 +8,8 @@ Level-Ordnern liegt; alles Schwere, was Level modern aussehen lässt, lebt hier,
 
 ```
 drahtseilakt-toolbox                     (das Fenster)
-drahtseilakt-toolbox remaster [--levels LIST] [--scale N] [--model NAME] [--relief S] [--data DIR]
+drahtseilakt-toolbox remaster [--levels LIST] [--scale N] [--model NAME] [--relief S] [--progress] [--data DIR]
+drahtseilakt-toolbox progress [--data DIR]
 drahtseilakt-toolbox sounds [--data DIR]
 drahtseilakt-toolbox remaster-open DIR [--scale N] [--model NAME] [--relief S]
 drahtseilakt-toolbox remaster-nmo FILE.nmo [--scale N] [--model NAME] [--relief S]
@@ -16,6 +17,8 @@ drahtseilakt-toolbox relief DIR [--scale N] [--relief S]
 drahtseilakt-toolbox import-maps DIR [--to DIR] [--catalogue FILE] [--unsorted DIR]
 drahtseilakt-toolbox import-maps --refresh DIR --catalogue FILE [--source DIR] [--unsorted DIR]
 ```
+
+**Meinen Fortschritt übernehmen.** Ein Kontrollkästchen unter den Textur-Einstellungen (und `progress [--data DIR]` oder `remaster --progress`) liest die `Database.tdb` des gewählten Ballance-Ordners und fügt ihre freigeschalteten Level und Highscores dem Datenordner des Spiels hinzu (`unlocked.txt`, `highscores.txt`). Es wird nur hinzugefügt: freigeschaltete Level sind eine Vereinigung, jede Liste behält die besten zehn beider; ein erneuter Lauf ändert nichts.
 
 **Ordner (2026-11-12).** In `levels/` des Spiels liegen `ballance-original/` (Ihre Kopie), `ballance-remaster/` (dorthin schreibt `remaster`) und `user-levels/` (dorthin schreibt `import-maps` standardmäßig; die früheren Namen `original/`, `remastered/` und `downloaded/` benennt das Spiel beim ersten Start um). Ein Level zählt nur dann als Level, wenn es in einem eigenen benannten Ordner liegt, der entweder eine `.nmo`-Datei oder ein Level im offenen Format enthält, dazu die Beschreibungsdatei `level.txt`: genau so sortiert `import-maps` ein.
 

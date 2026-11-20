@@ -403,6 +403,27 @@ text!(
     "Da giocare nel gioco: Start → Community maps (modalità estesa)."
 );
 
+text!(
+    TAKE_PROGRESS,
+    "Take over my progress (unlocked levels and highscores from the copy's Database.tdb)",
+    "Перенести мой прогресс (открытые уровни и рекорды из Database.tdb копии)",
+    "Meinen Fortschritt übernehmen (freigeschaltete Level und Highscores aus der Database.tdb der Kopie)",
+    "沿用我的进度（从副本的 Database.tdb 读取已解锁关卡和最高分）",
+    "Reprendre ma progression (niveaux débloqués et meilleurs scores de la Database.tdb de la copie)",
+    "Traspasar mi progreso (niveles desbloqueados y récords de la Database.tdb de la copia)",
+    "Riporta i miei progressi (livelli sbloccati e record dal Database.tdb della copia)"
+);
+text!(
+    TAKE_PROGRESS_HINT,
+    "Only adds: nothing you have in Drahtseilakt is lowered or removed.",
+    "Только добавляет: ничего из того, что у вас уже есть в Drahtseilakt, не уменьшается и не удаляется.",
+    "Fügt nur hinzu: nichts, was du in Drahtseilakt schon hast, wird gesenkt oder entfernt.",
+    "只增不减：你在 Drahtseilakt 中已有的内容不会被降低或删除。",
+    "N'ajoute que : rien de ce que vous avez déjà dans Drahtseilakt n'est réduit ni supprimé.",
+    "Solo añade: nada de lo que ya tienes en Drahtseilakt se reduce ni se borra.",
+    "Aggiunge soltanto: nulla di ciò che hai già in Drahtseilakt viene ridotto o rimosso."
+);
+
 #[cfg(test)]
 mod tests {
     use super::*;

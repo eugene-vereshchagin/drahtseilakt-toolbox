@@ -8,7 +8,8 @@ folders; everything heavy that makes levels look modern lives here, so the game 
 
 ```
 drahtseilakt-toolbox                     (the window)
-drahtseilakt-toolbox remaster [--levels LIST] [--scale N] [--model NAME] [--relief S] [--data DIR]
+drahtseilakt-toolbox remaster [--levels LIST] [--scale N] [--model NAME] [--relief S] [--progress] [--data DIR]
+drahtseilakt-toolbox progress [--data DIR]
 drahtseilakt-toolbox sounds [--data DIR]
 drahtseilakt-toolbox remaster-open DIR [--scale N] [--model NAME] [--relief S]
 drahtseilakt-toolbox remaster-nmo FILE.nmo [--scale N] [--model NAME] [--relief S]
@@ -16,6 +17,8 @@ drahtseilakt-toolbox relief DIR [--scale N] [--relief S]
 drahtseilakt-toolbox import-maps DIR [--to DIR] [--catalogue FILE] [--unsorted DIR]
 drahtseilakt-toolbox import-maps --refresh DIR --catalogue FILE [--source DIR] [--unsorted DIR]
 ```
+
+**Take over my progress.** A checkbox under the texture settings (and `progress [--data DIR]`, or `remaster --progress`) reads the `Database.tdb` of the Ballance folder you picked and adds its unlocked levels and highscores to the game's data folder (`unlocked.txt`, `highscores.txt`). It only adds: unlocked levels are a union, and each list keeps the best ten of both; running it again changes nothing.
 
 **Folders (2026-11-12).** The game's `levels/` holds `ballance-original/` (your copy), `ballance-remaster/` (what `remaster` writes) and `user-levels/` (what `import-maps` writes by default; the earlier names `original/`, `remastered/` and `downloaded/` are moved by the game at its first start). A level counts as a level only when it lies in its own named folder that holds either one `.nmo` file or an open-format level, plus the description file `level.txt`: `import-maps` writes exactly that.
 
